@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pymysql
+cryptography
+sqlalchemy
+beautifulsoup4
+requests
+lxml
+apscheduler
