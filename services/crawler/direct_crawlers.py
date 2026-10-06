@@ -222,7 +222,15 @@ class DirectTelecomCrawler(BaseCrawler):
             network_type = "5G" if "5G" in txt.upper() or "5G" in title.upper() else "LTE"
 
             month_match = re.search(r'(\d+)\s*개월', txt)
-            discount_months = int(month_match.group(1)) if month_match else 12
+            if month_match:
+                discount_months = int(month_match.group(1))
+            else:
+                # 할인 기간 파싱 실패 시 기본값 설정
+                # 가격 동일시 lifetime deal (-1) 이 아닌 경우에만 기본값 12 적용
+                if normal_price == discount_price:
+                    discount_months = -1  # Lifetime discount (가격 변동 없음)
+                else:
+                    discount_months = 12
 
             raw_text = f"[공식몰] {title} | {txt} | 망: {default_network} [출처: {telecom_name} 공식홈페이지]"
 
@@ -265,7 +273,18 @@ class DirectTelecomCrawler(BaseCrawler):
 
                     discount_price = int(item.get("monthlyFee") or item.get("salePrice") or item.get("basicFee") or 0)
                     normal_price = int(item.get("basicFee") or discount_price)
-                    discount_months = int(item.get("periodDiscMonth") or 12) or 12
+
+                    # 가격 동일시 lifetime deal (-1) 감지
+                    is_lifetime = (normal_price == discount_price)
+
+                    period_disc_month_str = item.get("periodDiscMonth")
+                    if period_disc_month_str:
+                        discount_months = int(period_disc_month_str)
+                    else:
+                        if is_lifetime:
+                            discount_months = -1  # Lifetime discount
+                        else:
+                            discount_months = 12
 
                     free_data = item.get("freeData") or ""
                     free_voice = item.get("freeVoice") or ""
@@ -340,6 +359,9 @@ class DirectTelecomCrawler(BaseCrawler):
 
                     month_match = re.search(r'(\d+)\s*개월\s*이후', clean_txt)
                     discount_months = int(month_match.group(1)) if month_match else 12
+                    # 파싱 실패 시 가격 동일 체크 (lifetime deal 감지)
+                    if not month_match and normal_price == discount_price:
+                        discount_months = -1  # Lifetime discount
 
                     raw_text = f"[공식몰] {title} | 망: {network_carrier} | {clean_txt} [출처: 이야기모바일 공식홈페이지]"
 
@@ -426,7 +448,11 @@ class DirectTelecomCrawler(BaseCrawler):
                         normal_price = int(digits)
 
                 discount_months = 12
-                time_after_tag = card.select_one(".time_after")
+                # 할인 기간 파싱 전: 가격 동일시 lifetime deal (-1) 감지
+                if normal_price == discount_price:
+                    discount_months = -1  # Lifetime discount
+                else:
+                    discount_months = 12
                 if time_after_tag:
                     m = re.search(r"(\d+)\s*개월", time_after_tag.get_text())
                     if m:
