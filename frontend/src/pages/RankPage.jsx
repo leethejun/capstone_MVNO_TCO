@@ -5,9 +5,9 @@ import { Filter, Zap, Wifi, Phone, ChevronRight } from 'lucide-react';
 export default function RankPage({ onSelectPlanForSubscribe }) {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [targetMonths, setTargetMonths] = useState(7);
+  const [targetMonths, setTargetMonths] = useState(12);
   const [minQosSpeed, setMinQosSpeed] = useState(0);
-  const [isUnlimitedOnly, setIsUnlimitedOnly] = useState(false);
+  const [unlimitedSms, setUnlimitedSms] = useState(false);
   const [unlimitedVoice, setUnlimitedVoice] = useState(false);
   const [networkType, setNetworkType] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -18,7 +18,7 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
       const data = await fetchPlansRank({
         targetMonths,
         minQosSpeedMbps: minQosSpeed,
-        isUnlimitedData: isUnlimitedOnly,
+        unlimitedSms,
         unlimitedVoice,
         networkType: networkType || null,
         limit: 30,
@@ -34,7 +34,7 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
 
   useEffect(() => {
     loadRank();
-  }, [targetMonths, minQosSpeed, isUnlimitedOnly, unlimitedVoice, networkType]);
+  }, [targetMonths, minQosSpeed, unlimitedSms, unlimitedVoice, networkType]);
 
   const qosPresets = [
     { label: '전체 QoS', value: 0 },
@@ -54,21 +54,14 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
           </span>
           <span className="text-[11px] font-semibold text-indigo-600">{targetMonths}개월 총비용 최적화</span>
         </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {[6, 7, 12, 24].map((m) => (
-            <button
-              key={m}
-              onClick={() => setTargetMonths(m)}
-              className={`py-2 text-xs rounded-xl font-semibold transition ${
-                targetMonths === m
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {m}개월
-            </button>
-          ))}
-        </div>
+        <select
+          aria-label="환승 이용 주기"
+          value={targetMonths}
+          onChange={(e) => setTargetMonths(Number(e.target.value))}
+          className="w-full py-2 px-3 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:border-indigo-500"
+        >
+          {[6, 12, 24, 36, 48].map((m) => <option key={m} value={m}>{m}개월</option>)}
+        </select>
       </div>
 
       {/* QoS 무제한 필터 칩 */}
@@ -104,12 +97,15 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
         {showFilters && (
           <div className="p-3 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-2.5 animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-600 font-medium">추가 과금 없는 실질 무제한만</span>
+              <span className="text-xs text-slate-600 font-medium">문자 무제한</span>
               <button
-                onClick={() => setIsUnlimitedOnly(!isUnlimitedOnly)}
-                className={`w-9 h-5 rounded-full transition relative ${isUnlimitedOnly ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                role="switch"
+                aria-label="문자 무제한"
+                aria-checked={unlimitedSms}
+                onClick={() => setUnlimitedSms(!unlimitedSms)}
+                className={`w-9 h-5 rounded-full transition relative ${unlimitedSms ? 'bg-indigo-600' : 'bg-slate-200'}`}
               >
-                <div className={`w-4 h-4 rounded-full bg-white transition absolute top-0.5 ${isUnlimitedOnly ? 'left-4.5' : 'left-0.5'}`} />
+                <div className={`w-4 h-4 rounded-full bg-white transition absolute top-0.5 ${unlimitedSms ? 'left-4.5' : 'left-0.5'}`} />
               </button>
             </div>
 
@@ -166,6 +162,7 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
             const rank = idx + 1;
             const telecomName = p.telecom?.name || p.telecom_name || '알뜰폰';
             const discountPrice = Number(p.discount_price || 0);
+            const normalPrice = p.normal_price == null ? null : Number(p.normal_price);
             const tco = Number(p.tco ?? 0);
             const monthlyAvg = Number(p.monthly_avg_price ?? (targetMonths > 0 ? Math.round(tco / targetMonths) : discountPrice));
 
@@ -229,13 +226,19 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
                   <div>문자 {p.sms_count === -1 ? '무제한' : `${p.sms_count || 0}건`}</div>
                 </div>
 
-                {/* 가격 정보: 월 할인가 vs TCO 총비용 */}
+                {/* 가격 정보: 월 할인가, 정상가, TCO 총비용 */}
                 <div className="flex items-end justify-between pt-2 border-t border-slate-100">
                   <div>
-                    <span className="text-[11px] text-slate-400">월 할인가 ({p.discount_months || 12}개월간)</span>
+                    <span className="text-[11px] text-slate-400">월 할인가 ({p.discount_months === -1 ? '평생 할인' : `${p.discount_months}개월간`})</span>
                     <div className="text-base font-black text-slate-900 leading-tight">
                       {discountPrice.toLocaleString()}
                       <span className="text-xs font-normal text-slate-500 ml-0.5">원/월</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {p.discount_months > 0 ? '할인 종료 후 정상가' : '정상가'}{' '}
+                      <span className="font-semibold text-slate-700">
+                        {normalPrice == null ? '미확인' : `${normalPrice.toLocaleString()}원/월`}
+                      </span>
                     </div>
                   </div>
 

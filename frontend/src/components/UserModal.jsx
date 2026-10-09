@@ -4,7 +4,7 @@ import { createUser, getUser } from '../api';
 
 export default function UserModal({ isOpen, onClose, currentUser, onSelectUser }) {
   const [email, setEmail] = useState('');
-  const [targetMonths, setTargetMonths] = useState(7);
+  const [targetMonths, setTargetMonths] = useState(12);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -12,7 +12,7 @@ export default function UserModal({ isOpen, onClose, currentUser, onSelectUser }
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!email || !email.includes('@')) {
+    if (!email.trim() || !email.includes('@')) {
       setError('올바른 이메일 주소를 입력해주세요.');
       return;
     }
@@ -21,25 +21,13 @@ export default function UserModal({ isOpen, onClose, currentUser, onSelectUser }
 
     try {
       const newUser = await createUser({
-        email,
+        email: email.trim(),
         defaultTargetMonths: Number(targetMonths),
       });
       onSelectUser(newUser);
       onClose();
     } catch (err) {
-      // 이미 등록된 경우 1번 기본 사용자로 fallback
-      if (err.message && err.message.includes('이미 등록된')) {
-        setError('이미 등록된 이메일입니다. 기존 계정 번호(user_id=1)를 사용합니다.');
-        try {
-          const user1 = await getUser(1);
-          onSelectUser(user1);
-          setTimeout(() => onClose(), 1000);
-        } catch {
-          setError(err.message);
-        }
-      } else {
-        setError(err.message || '로그인/가입 실패');
-      }
+      setError(err.message || '로그인/가입 실패');
     } finally {
       setLoading(false);
     }
@@ -56,7 +44,7 @@ export default function UserModal({ isOpen, onClose, currentUser, onSelectUser }
     } catch {
       // 1번이 없으면 랜덤 데모 생성
       const demoEmail = `demo_${Date.now()}@mvno.com`;
-      const newUser = await createUser({ email: demoEmail, defaultTargetMonths: 7 });
+      const newUser = await createUser({ email: demoEmail, defaultTargetMonths: 12 });
       onSelectUser(newUser);
       onClose();
     } finally {
@@ -108,22 +96,14 @@ export default function UserModal({ isOpen, onClose, currentUser, onSelectUser }
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">선호 약정/환승 주기</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[6, 7, 12, 24].map((m) => (
-                <button
-                  type="button"
-                  key={m}
-                  onClick={() => setTargetMonths(m)}
-                  className={`py-2 text-xs rounded-xl font-medium border transition ${
-                    targetMonths === m
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {m}개월
-                </button>
-              ))}
-            </div>
+            <select
+              aria-label="환승 이용 주기"
+              value={targetMonths}
+              onChange={(e) => setTargetMonths(Number(e.target.value))}
+              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:border-indigo-500"
+            >
+              {[6, 12, 24, 36, 48].map((m) => <option key={m} value={m}>{m}개월</option>)}
+            </select>
           </div>
 
           {error && <p className="text-[11px] text-rose-500">{error}</p>}

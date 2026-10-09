@@ -48,7 +48,7 @@ class PlanRankItem(PlanResponse):
 class UserCreate(BaseModel):
     email: str
     fcm_token: Optional[str] = None
-    default_target_months: int = 7
+    default_target_months: int = 12
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

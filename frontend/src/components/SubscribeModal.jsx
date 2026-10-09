@@ -4,7 +4,7 @@ import { createSubscription } from '../api';
 
 export default function SubscribeModal({ isOpen, onClose, plan, currentUser, onSuccess }) {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [targetMonths, setTargetMonths] = useState(plan?.discount_months || 7);
+  const [targetMonths, setTargetMonths] = useState(12);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -62,9 +62,15 @@ export default function SubscribeModal({ isOpen, onClose, plan, currentUser, onS
             <span>월 할인 납부액</span>
             <span className="font-bold text-indigo-600">{(plan.discount_price || 0).toLocaleString()}원</span>
           </div>
+          {Number(plan.normal_price || 0) > Number(plan.discount_price || 0) && (
+            <div className="flex justify-between items-center text-slate-500 text-[11px]">
+              <span>할인 만료 후 정상 요금</span>
+              <span className="font-semibold text-rose-600">{Number(plan.normal_price).toLocaleString()}원/월</span>
+            </div>
+          )}
           <div className="flex justify-between items-center text-slate-500 text-[11px]">
             <span>프로모션 할인 기간</span>
-            <span>{plan.discount_months || 12}개월간</span>
+            <span>{plan.discount_months === -1 ? '평생 할인' : `${plan.discount_months || 12}개월간`}</span>
           </div>
         </div>
 
@@ -84,22 +90,14 @@ export default function SubscribeModal({ isOpen, onClose, plan, currentUser, onS
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">예상 이용 주기 (약정 개월)</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[6, 7, 12, 24].map((m) => (
-                <button
-                  type="button"
-                  key={m}
-                  onClick={() => setTargetMonths(m)}
-                  className={`py-2 text-xs rounded-xl font-medium border transition ${
-                    targetMonths === m
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {m}개월
-                </button>
-              ))}
-            </div>
+            <select
+              aria-label="환승 이용 주기"
+              value={targetMonths}
+              onChange={(e) => setTargetMonths(Number(e.target.value))}
+              className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:border-indigo-500"
+            >
+              {[6, 12, 24, 36, 48].map((m) => <option key={m} value={m}>{m}개월</option>)}
+            </select>
           </div>
 
           <div className="p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-xl text-[11px] text-indigo-800 leading-relaxed">

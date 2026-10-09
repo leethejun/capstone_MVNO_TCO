@@ -65,7 +65,7 @@ class User(Base):
     user_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     email = Column(String(100), unique=True, nullable=False)
     fcm_token = Column(String(255), nullable=True)
-    default_target_months = Column(Integer, default=7)
+    default_target_months = Column(Integer, default=12)
     created_at = Column(DateTime, default=datetime.now)
 
     subscriptions = relationship("UserSubscription", back_populates="user", cascade="all, delete-orphan")

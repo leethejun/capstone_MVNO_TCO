@@ -14,12 +14,13 @@ export default function App() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedPlanForSubscribe, setSelectedPlanForSubscribe] = useState(null);
 
-  // 로컬스토리지에서 기존 user_id 복원, 없으면 기본 1번 유저 시도
+  // 이전에 선택한 계정만 복원한다. 데모 계정은 사용자가 직접 선택한다.
   useEffect(() => {
     const savedUserId = localStorage.getItem('mvno_user_id');
+    if (!savedUserId) return;
     const initUser = async () => {
       try {
-        const idToLoad = savedUserId ? Number(savedUserId) : 1;
+        const idToLoad = Number(savedUserId);
         const user = await getUser(idToLoad);
         setCurrentUser(user);
         localStorage.setItem('mvno_user_id', user.user_id);

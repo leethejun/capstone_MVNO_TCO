@@ -1,5 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User
@@ -7,19 +9,29 @@ from schemas import UserCreate, UserResponse
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
-@router.post("", response_model=UserResponse, summary="신규 사용자 등록")
+@router.post("", response_model=UserResponse, summary="이메일로 기존 사용자 연결 또는 신규 등록")
 def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == user_in.email).first()
+    email = user_in.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=422, detail="올바른 이메일 주소를 입력해주세요.")
+    existing = db.query(User).filter(func.lower(User.email) == email).first()
     if existing:
-        raise HTTPException(status_code=400, detail="이미 등록된 이메일입니다.")
+        return existing
 
     user = User(
-        email=user_in.email,
+        email=email,
         fcm_token=user_in.fcm_token,
         default_target_months=user_in.default_target_months
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = db.query(User).filter(func.lower(User.email) == email).first()
+        if existing:
+            return existing
+        raise
     db.refresh(user)
     return user
 

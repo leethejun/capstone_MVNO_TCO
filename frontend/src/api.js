@@ -1,12 +1,13 @@
-const API_BASE = "http://localhost:8000/api";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 
 export async function fetchPlansRank({
-  targetMonths = 7,
+  targetMonths = 12,
   minDataGb = 0,
   minDailyDataGb = 0,
   minQosSpeedMbps = 0,
   isUnlimitedData = false,
   unlimitedVoice = false,
+  unlimitedSms = false,
   networkType = null,
   limit = 30
 } = {}) {
@@ -17,6 +18,7 @@ export async function fetchPlansRank({
   if (minQosSpeedMbps > 0) params.append("min_qos_speed_mbps", minQosSpeedMbps);
   if (isUnlimitedData) params.append("is_unlimited_data", "true");
   if (unlimitedVoice) params.append("unlimited_voice", "true");
+  if (unlimitedSms) params.append("unlimited_sms", "true");
   if (networkType) params.append("network_type", networkType);
   params.append("limit", limit);
 
@@ -25,7 +27,7 @@ export async function fetchPlansRank({
   return res.json();
 }
 
-export async function createUser({ email, defaultTargetMonths = 7 }) {
+export async function createUser({ email, defaultTargetMonths = 12 }) {
   const res = await fetch(`${API_BASE}/users`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

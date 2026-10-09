@@ -224,6 +224,9 @@ class MvnohubCrawler(BaseCrawler):
             if price_digits:
                 discount_price = int(price_digits)
 
+        if now_price_tag is None or not price_digits:
+            return None
+
         # 5. 정상 요금
         normal_price = discount_price
         after_price_tag = card.select_one(".time_after span")

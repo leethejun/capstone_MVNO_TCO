@@ -18,7 +18,11 @@ async def lifespan(app: FastAPI):
     start_scheduler()
     yield
     # 서버 종료 시 스케줄러 안전 종료
-    shutdown_scheduler()
+    try:
+        print("\n[main.py] Lifespan shutdown: 스케줄러 종료...")
+        shutdown_scheduler()
+    except Exception as e:
+        print(f"[main.py] Lifespan shutdown 오류 (비중요): {e}")
 
 app = FastAPI(
     title="알뜰폰 TCO 최적화 API",

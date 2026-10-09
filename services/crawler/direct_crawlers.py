@@ -3,7 +3,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-from typing import List, Dict, Any, Set, Tuple
+from typing import List, Dict, Any, Set, Tuple, Optional
 from services.crawler.base import BaseCrawler
 
 
@@ -26,6 +26,7 @@ class DirectTelecomCrawler(BaseCrawler):
     def __init__(self, timeout: int = 10, delay_sec: float = 0.2):
         self.timeout = timeout
         self.delay_sec = delay_sec
+        self._detail_price_cache: Dict[str, Optional[int]] = {}
 
     def fetch_raw_plans(self) -> List[Dict[str, Any]]:
         """
@@ -149,8 +150,17 @@ class DirectTelecomCrawler(BaseCrawler):
                     if full.startswith(home_url):
                         plan_urls.add(full)
 
-            # 방문할 URL 목록: 메인 + 최대 2개 요금제 페이지
-            targets = [home_url] + list(plan_urls)[:2]
+            # 요금제 목록 페이지 우선순위 정렬 (view/detail 단일 페이지보다 list/rate_plan 등 목록 페이지 우선)
+            sorted_plan_urls = sorted(
+                plan_urls,
+                key=lambda u: (
+                    0 if any(k in u.lower() for k in ["rate_plan.do", "plan_list", "/plan/list", "rate_plan", "/plan"]) and not any(v in u.lower() for v in ["view", "detail"]) else
+                    1 if not any(v in u.lower() for v in ["view", "detail", "charge_account", "charge_credit", "charge_autopay"]) else
+                    2
+                )
+            )
+            # 방문할 URL 목록: 메인 + 주요 요금제 페이지 (최대 3개)
+            targets = [home_url] + sorted_plan_urls[:3]
 
             for target_url in targets:
                 try:
@@ -168,14 +178,44 @@ class DirectTelecomCrawler(BaseCrawler):
 
         return plans
 
+    def _fetch_normal_price_from_detail(self, detail_url: str) -> Optional[int]:
+        """카드에 정상가가 누락된 경우 상세 페이지에서 'N개월 이후 XX원' 또는 정상가 추출"""
+        if detail_url in self._detail_price_cache:
+            return self._detail_price_cache[detail_url]
+
+        try:
+            r = requests.get(detail_url, headers=self.HEADERS, timeout=3)
+            if r.status_code == 200:
+                # 1. '7개월 이후 56,650원', '이후 56,650원', '정상가 56,650원' 등 패턴 탐색
+                matches = re.findall(r'(?:\*?\d+\s*개월\s*이후|정상가?|기본료)\s*([\d,]+)\s*원', r.text)
+                if matches:
+                    val = int(matches[0].replace(",", ""))
+                    self._detail_price_cache[detail_url] = val
+                    return val
+
+                # 2. .origin, del 등 정상가 태그 탐색
+                soup = BeautifulSoup(r.text, "html.parser")
+                origin_el = soup.select_one(".origin, del, s, strike, .before_price, .normal_price")
+                if origin_el:
+                    digits = re.sub(r"[^\d]", "", origin_el.get_text())
+                    if digits:
+                        val = int(digits)
+                        self._detail_price_cache[detail_url] = val
+                        return val
+        except Exception:
+            pass
+
+        self._detail_price_cache[detail_url] = None
+        return None
+
     def _extract_plans_from_html(self, telecom_name: str, soup: BeautifulSoup, page_url: str, default_network: str) -> List[Dict[str, Any]]:
         """일반 웹페이지 HTML에서 요금제 패턴(카드, 박스, 리스트)을 직접 추출"""
         plans = []
         seen_titles = set()
 
-        # 요금제 카드로 추정되는 컨테이너 셀렉터
+        # 요금제 카드로 추정되는 컨테이너 셀렉터 (.rate_card_item 등 추가)
         candidate_selectors = [
-            ".plan-card, .plan_card, .plan-item, .plan_item, .plan_box, .plan-box",
+            ".rate_card_item, .plan-card, .plan_card, .plan-item, .plan_item, .plan_box, .plan-box, .card_list_item",
             ".rate-item, .rate_item, .card-plan, .product-item",
             "li[class*='plan'], div[class*='plan_list'] > ul > li",
             "table.plan_table tbody tr, table.rate_table tbody tr"
@@ -188,13 +228,8 @@ class DirectTelecomCrawler(BaseCrawler):
                 elements = found
                 break
 
-        # 후보 태그가 없으면 데이터/가격이 포함된 블록 탐색
-        if not elements:
-            for div in soup.find_all(["div", "li"], class_=True):
-                text = div.get_text(" ", strip=True)
-                if ("GB" in text or "MB" in text) and "원" in text and len(text) < 300:
-                    elements.append(div)
-
+        # 임의 div/li 탐색은 메뉴·혜택·로밍 안내까지 상품으로 오인한다.
+        # 알려진 상품 카드가 없으면 사이트별 전용 크롤러가 필요하다.
         for el in elements:
             txt = re.sub(r"\s+", " ", el.get_text(" ", strip=True)).strip()
             if not ("원" in txt and ("GB" in txt or "MB" in txt or "통화" in txt)):
@@ -203,21 +238,48 @@ class DirectTelecomCrawler(BaseCrawler):
             # 요금제명 추출
             title_el = el.select_one(".tit, .title, strong, h3, h4, .name")
             if title_el:
-                title = title_el.get_text(strip=True)
+                title = title_el.get_text(" ", strip=True)
             else:
                 m = re.search(r'([A-Za-z0-9가-힣+]{2,15}(?:\s+[A-Za-z0-9가-힣+]{1,10}){1,3})', txt)
                 title = m.group(1) if m else f"{telecom_name} 알뜰요금제"
 
-            title = re.sub(r'[^\w\s+()\[\]-]', '', title).strip()
+            # 소수점(.), 퍼센트(%), 슬래시(/) 등 요금제 스펙 문자가 제거되지 않도록 보존
+            title = re.sub(r'[^\w\s+()\[\]./%\-~,]', '', title).strip()
+            title = re.sub(r'\s+', ' ', title)
             if not title or len(title) < 2 or title in seen_titles or title in ["비교", "신청하기", "상세보기", "더보기"]:
                 continue
             seen_titles.add(title)
 
-            # 가격 추출
-            prices = re.findall(r'([\d,]+)\s*원', txt)
-            numeric_prices = [int(p.replace(",", "")) for p in prices if 100 <= int(p.replace(",", "")) <= 200000]
-            discount_price = min(numeric_prices) if numeric_prices else 0
-            normal_price = max(numeric_prices) if numeric_prices else discount_price
+            # 1. 명시적 정상가/할인가 태그 탐색 (.origin, del 등)
+            origin_el = el.select_one(".origin, del, s, strike, .before_price, .orig_price, .normal_price")
+            disc_el = el.select_one(".discount, .now, .sale, .sale_price, .current_price")
+
+            explicit_normal = None
+            if origin_el:
+                m_orig = re.search(r'([\d,]+)\s*원?', origin_el.get_text())
+                if m_orig:
+                    explicit_normal = int(m_orig.group(1).replace(",", ""))
+
+            explicit_disc = None
+            if disc_el:
+                m_disc = re.search(r'([\d,]+)\s*원?', disc_el.get_text())
+                if m_disc:
+                    explicit_disc = int(m_disc.group(1).replace(",", ""))
+
+            # 2. 가격 추출 (.price 클래스 영역 우선 탐색 후 fallback)
+            price_el = el.select_one(".price, .fee, .pay, .money, .cost")
+            price_text = price_el.get_text(" ", strip=True) if price_el else txt
+            prices = re.findall(r'(?<![\d.,])(\d[\d,]*)(?![\d.,])\s*원', price_text)
+            # 메뉴·쿠폰·실체감 가격을 월 납부액으로 해석하지 않는다.
+            if price_el is None and disc_el is None:
+                continue
+            if explicit_disc is None and not prices:
+                continue
+
+            # 0원 및 10원 등 초저가 프로모션 요금제도 유효 가격으로 수집
+            numeric_prices = [int(p.replace(",", "")) for p in prices if 0 <= int(p.replace(",", "")) <= 300000]
+            discount_price = explicit_disc if explicit_disc is not None else (min(numeric_prices) if numeric_prices else 0)
+            normal_price = explicit_normal if explicit_normal is not None else (max(numeric_prices) if numeric_prices else discount_price)
 
             network_type = "5G" if "5G" in txt.upper() or "5G" in title.upper() else "LTE"
 
@@ -226,13 +288,22 @@ class DirectTelecomCrawler(BaseCrawler):
                 discount_months = int(month_match.group(1))
             else:
                 # 할인 기간 파싱 실패 시 기본값 설정
-                # 가격 동일시 lifetime deal (-1) 이 아닌 경우에만 기본값 12 적용
                 if normal_price == discount_price:
                     discount_months = -1  # Lifetime discount (가격 변동 없음)
                 else:
                     discount_months = 12
 
-            raw_text = f"[공식몰] {title} | {txt} | 망: {default_network} [출처: {telecom_name} 공식홈페이지]"
+            # 3. 할인 기간이 명시되어 있는데 정상가격이 누락된 경우, 상세 링크 방문하여 정상가 보완
+            if discount_months > 0 and normal_price == discount_price:
+                link_el = el.select_one("a[href]") or el.find_parent("a", href=True)
+                if link_el and link_el.get("href"):
+                    detail_url = urljoin(page_url, link_el["href"])
+                    if any(k in detail_url.lower() for k in ["view", "detail", "prod", "plan"]):
+                        fetched_normal = self._fetch_normal_price_from_detail(detail_url)
+                        if fetched_normal and fetched_normal > discount_price:
+                            normal_price = fetched_normal
+
+            raw_text = f"[공식몰] {title} | {txt} | 망: {default_network} [출처: {telecom_name} 공식홈페이지] [월요금 요소 검증]"
 
             plans.append({
                 "telecom_name": telecom_name,
@@ -331,6 +402,8 @@ class DirectTelecomCrawler(BaseCrawler):
                 for card in soup.select(".plan-card-body"):
                     txt = card.get_text(separator=" | ", strip=True)
                     clean_txt = re.sub(r"\s+", " ", txt).strip()
+                    if re.search(r"종량제|쓴\s*만큼\s*과금|원\s*/\s*(?:MB|GB|분|건)", clean_txt, re.IGNORECASE):
+                        continue
 
                     tokens = [t.strip() for t in clean_txt.split("|") if t.strip()]
                     title = ""
@@ -352,9 +425,11 @@ class DirectTelecomCrawler(BaseCrawler):
 
                     network_type = "5G" if "5G" in clean_txt.upper() or "5G" in title.upper() else "LTE"
 
-                    prices = re.findall(r'([\d,]+)\s*원', clean_txt)
-                    numeric_prices = [int(p.replace(",", "")) for p in prices if 100 <= int(p.replace(",", "")) <= 200000]
-                    discount_price = min(numeric_prices) if numeric_prices else 0
+                    prices = re.findall(r'(?<![\d.,])(\d[\d,]*)(?![\d.,])\s*원', clean_txt)
+                    numeric_prices = [int(p.replace(",", "")) for p in prices if 0 <= int(p.replace(",", "")) <= 300000]
+                    if not numeric_prices:
+                        continue
+                    discount_price = min(numeric_prices)
                     normal_price = max(numeric_prices) if numeric_prices else discount_price
 
                     month_match = re.search(r'(\d+)\s*개월\s*이후', clean_txt)
@@ -395,12 +470,20 @@ class DirectTelecomCrawler(BaseCrawler):
                     title_el = card.select_one(".tit, strong, h3, .name")
                     if title_el:
                         title = title_el.get_text(strip=True)
+                        # 가격 전용 요소가 없는 카드는 수집하지 않는다.
+                        price_el = card.select_one(".price, .fee, .pay, .money, .cost")
+                        if price_el is None:
+                            continue
+                        prices = re.findall(r'(?<![\d.,])(\d[\d,]*)(?![\d.,])\s*원', price_el.get_text(" ", strip=True))
+                        if not prices:
+                            continue
+                        amounts = [int(value.replace(",", "")) for value in prices]
                         plans.append({
                             "telecom_name": "유니컴즈",
                             "title": f"[공식몰] {title}",
-                            "network_type": "LTE",
-                            "discount_price": 0,
-                            "normal_price": 0,
+                            "network_type": "5G" if "5G" in title.upper() else "LTE",
+                            "discount_price": min(amounts),
+                            "normal_price": max(amounts),
                             "discount_months": 12,
                             "raw_text": f"[공식몰] {title} | {txt} [출처: 모빙 공식홈페이지]"
                         })
@@ -433,7 +516,10 @@ class DirectTelecomCrawler(BaseCrawler):
                 network_type = "5G" if "5G" in title.upper() else "LTE"
 
                 now_price_tag = card.select_one(".price p.now span")
-                discount_price = int(re.sub(r"[^\d]", "", now_price_tag.get_text())) if now_price_tag else 0
+                price_digits = re.sub(r"[^\d]", "", now_price_tag.get_text()) if now_price_tag else ""
+                if not price_digits:
+                    continue
+                discount_price = int(price_digits)
 
                 normal_price = discount_price
                 after_price_tag = card.select_one(".time_after span")
@@ -453,6 +539,7 @@ class DirectTelecomCrawler(BaseCrawler):
                     discount_months = -1  # Lifetime discount
                 else:
                     discount_months = 12
+                time_after_tag = card.select_one(".time_after")
                 if time_after_tag:
                     m = re.search(r"(\d+)\s*개월", time_after_tag.get_text())
                     if m:
