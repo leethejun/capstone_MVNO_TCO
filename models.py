@@ -14,6 +14,9 @@ class SubscriptionStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 class NoticeType(str, enum.Enum):
+    MONTH_BEFORE = "MONTH_BEFORE"
+    D_1 = "D-1"
+    # 과거 발송 이력을 읽기 위해 기존 종류도 보존한다.
     D_14 = "D-14"
     D_7 = "D-7"
     D_3 = "D-3"

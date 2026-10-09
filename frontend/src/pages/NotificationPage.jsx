@@ -44,7 +44,7 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
     if (perm === 'granted') {
       new Notification('알뜰알뜰 환승 알리미', {
         body: '브라우저 환승 알림이 활성화되었습니다! D-Day에 알림을 전송합니다.',
-        icon: '/vite.svg',
+        icon: '/favicon.svg',
       });
     }
   };
@@ -58,10 +58,10 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
       setTriggerResult(`배치 실행 성공: ${res.sent_count || 0}건 발송됨`);
       await loadData(); // 갱신된 SENT 상태 및 추천 요금제 리로드
 
-      if ('Notification' in window && Notification.permission === 'granted') {
+      if (res.sent_count > 0 && 'Notification' in window && Notification.permission === 'granted') {
         new Notification('🚨 [D-Day 환승 알림 도착]', {
           body: '프로모션 만료가 도래했습니다! 월 비용을 절약할 수 있는 TCO 최적 요금제를 확인하세요.',
-          icon: '/vite.svg',
+          icon: '/favicon.svg',
         });
       }
     } catch (err) {
@@ -94,7 +94,7 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
   subscriptions.forEach((sub) => {
     const notifs = sub.notifications || [];
     notifs.forEach((notif) => {
-      allNotifications.push({ ...notif, currentPlan: sub.plan });
+      allNotifications.push({ ...notif, currentPlan: sub.plan, recommendationAvailable: sub.recommendation_available, recommendationStartDate: sub.recommendation_start_date });
     });
   });
 
@@ -113,7 +113,7 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
         </div>
 
         <p className="text-xs text-indigo-200 leading-relaxed">
-          매일 자정에 프로모션 만료일을 자동 감지하여, 스펙(QoS, 데이터)이 유사한 <strong>TCO 최저가 대체 요금제</strong>를 선별 발송합니다.
+          매일 자정에 유지기간 종료 한 달 전·일주일 전·하루 전에, 스펙(QoS, 데이터)이 유사한 <strong>TCO 최저가 대체 요금제</strong>를 선별 발송합니다.
         </p>
 
         {/* 브라우저 푸시 권한 버튼 */}
@@ -162,10 +162,10 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
           </div>
         ) : (
           allNotifications.map((notif) => {
-            const hasRecommendation = !!notif.recommended_plan;
+            const hasRecommendation = notif.recommendationAvailable && !!notif.recommended_plan;
             const currentPlan = notif.currentPlan || {};
             const recPlan = notif.recommended_plan || {};
-            const noticeTypeStr = String(notif.notice_type || '').replace('_', '-');
+            const noticeTypeStr = ({ MONTH_BEFORE: '한 달 전', 'D-7': '일주일 전', 'D-1': '하루 전' })[notif.notice_type] || String(notif.notice_type || '').replace('_', '-');
 
             const currentNormalPrice = Number(currentPlan.normal_price || 0);
             const recDiscountPrice = Number(recPlan.discount_price || 0);
@@ -180,9 +180,9 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
                   <div className="flex items-center gap-2">
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        notif.notice_type === 'D_3'
+                        notif.notice_type === 'D-1'
                           ? 'bg-rose-100 text-rose-700'
-                          : notif.notice_type === 'D_7'
+                          : notif.notice_type === 'D-7'
                           ? 'bg-amber-100 text-amber-800'
                           : 'bg-indigo-100 text-indigo-700'
                       }`}
@@ -249,7 +249,9 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
                   </div>
                 ) : (
                   <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-500 text-center">
-                    자정 배치 시 현재 요금제 스펙을 분석하여 최적의 대체 요금제가 매핑됩니다.
+                    {notif.recommendationAvailable
+                      ? '예약된 알림 발송 시점에 최신 요금제를 비교하여 추천합니다.'
+                      : `추천 요금제는 유지기간 종료 한 달 전(${notif.recommendationStartDate})부터 표시됩니다.`}
                   </div>
                 )}
               </div>

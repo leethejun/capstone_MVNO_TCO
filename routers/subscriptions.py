@@ -1,11 +1,12 @@
 import calendar
 from datetime import date, timedelta
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import User, Plan, UserSubscription, Notification, SubscriptionStatus, NoticeType, NotificationStatus
 from schemas import SubscriptionCreate, SubscriptionResponse
+from services.lifecycle import notification_schedule, target_end_date, recommendation_start_date, recommendation_available
 
 router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions & Notifications"])
 
@@ -44,15 +45,8 @@ def create_subscription(sub_in: SubscriptionCreate, db: Session = Depends(get_db
     db.add(subscription)
     db.flush()  # subscription_id 확보
 
-    # 3. 만료일 기준 D-14, D-7, D-3 환승 알림 스케줄 자동 생성
-    notification_configs = [
-        (NoticeType.D_14, 14),
-        (NoticeType.D_7, 7),
-        (NoticeType.D_3, 3)
-    ]
-
-    for notice_type, days_before in notification_configs:
-        sched_date = discount_end_date - timedelta(days=days_before)
+    # 선택한 유지기간 종료 한 달 전·일주일 전·하루 전 알림을 예약한다.
+    for notice_type, sched_date in notification_schedule(subscription):
         notification = Notification(
             subscription_id=subscription.subscription_id,
             notice_type=notice_type,
@@ -66,7 +60,7 @@ def create_subscription(sub_in: SubscriptionCreate, db: Session = Depends(get_db
 
     # relations eager loading
     subscription.plan = plan
-    return subscription
+    return serialize_subscription(subscription)
 
 @router.get("/user/{user_id}", response_model=List[SubscriptionResponse], summary="특정 사용자의 개통 요금제 목록 및 알림 상태 조회")
 def get_user_subscriptions(user_id: int, db: Session = Depends(get_db)):
@@ -78,7 +72,7 @@ def get_user_subscriptions(user_id: int, db: Session = Depends(get_db)):
         .filter(UserSubscription.user_id == user_id)\
         .order_by(UserSubscription.created_at.desc())\
         .all()
-    return subs
+    return [serialize_subscription(sub) for sub in subs]
 
 @router.get("/{subscription_id}", response_model=SubscriptionResponse, summary="개통 상세 정보 및 알림 조회")
 def get_subscription_detail(subscription_id: int, db: Session = Depends(get_db)):
@@ -92,4 +86,29 @@ def get_subscription_detail(subscription_id: int, db: Session = Depends(get_db))
 
     if not sub:
         raise HTTPException(status_code=404, detail="개통 정보를 찾을 수 없습니다.")
-    return sub
+    return serialize_subscription(sub)
+
+
+def serialize_subscription(sub):
+    result = SubscriptionResponse.model_validate(sub)
+    result.target_end_date = target_end_date(sub)
+    result.recommendation_start_date = recommendation_start_date(sub)
+    result.recommendation_available = recommendation_available(sub)
+    if not result.recommendation_available:
+        for notification in result.notifications:
+            notification.recommended_plan_id = None
+            notification.recommended_plan = None
+    return result
+
+
+@router.delete("/{subscription_id}", status_code=204, summary="내 요금제 및 관련 알림 삭제")
+def delete_subscription(subscription_id: int, user_id: int = Query(..., ge=1), db: Session = Depends(get_db)):
+    sub = db.query(UserSubscription).filter(
+        UserSubscription.subscription_id == subscription_id,
+        UserSubscription.user_id == user_id
+    ).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="등록된 요금제를 찾을 수 없습니다.")
+    db.delete(sub)  # ORM cascade로 예약·발송 알림도 함께 삭제한다.
+    db.commit()
+    return Response(status_code=204)

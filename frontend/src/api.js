@@ -86,3 +86,12 @@ export async function getCrawlerStatus() {
   if (!res.ok) throw new Error("크롤러 상태 조회 실패");
   return res.json();
 }
+
+export async function deleteSubscription({ subscriptionId, userId }) {
+  const params = new URLSearchParams({ user_id: userId });
+  const res = await fetch(`${API_BASE}/subscriptions/${subscriptionId}?${params}`, { method: "DELETE" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "요금제 삭제 실패");
+  }
+}

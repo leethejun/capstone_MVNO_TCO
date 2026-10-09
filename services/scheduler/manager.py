@@ -22,7 +22,7 @@ def start_scheduler():
             job_send_lifecycle_notifications,
             trigger=CronTrigger(hour=0, minute=0, timezone="Asia/Seoul"),
             id="midnight_lifecycle_notifications",
-            name="매일 자정 00:00 프로모션 만료 D-14/7/3 환승 알림 배치",
+            name="매일 자정 00:00 유지기간 종료 한 달/7일/1일 전 환승 알림 배치",
             replace_existing=True
         )
 

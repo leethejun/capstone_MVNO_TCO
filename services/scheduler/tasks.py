@@ -3,10 +3,11 @@ from typing import Dict, Any, List
 from sqlalchemy.orm import Session, joinedload
 
 from database import SessionLocal
-from models import Notification, UserSubscription, Plan, User, NotificationStatus
+from models import Notification, UserSubscription, Plan, User, NotificationStatus, SubscriptionStatus
 from services.crawler.pipeline import run_comprehensive_crawler_pipeline
 from services.recommender import recommend_best_plan
 from services.notifier import NotificationDispatcher
+from services.lifecycle import recommendation_available
 
 def job_crawl_mvno_plans() -> Dict[str, Any]:
     """
@@ -29,7 +30,7 @@ def job_crawl_mvno_plans() -> Dict[str, Any]:
 def job_send_lifecycle_notifications(db: Session = None) -> Dict[str, Any]:
     """
     [매일 자정 00:00 정기 배치 작업]
-    만료일 기준 D-14, D-7, D-3 도래 대상자를 조회하고,
+    유지기간 종료 한 달 전, 일주일 전, 하루 전 도래 대상자를 조회하고,
     TCO 최저가 대체 요금제를 추천하여 알림 발송 및 상태 업데이트
     """
     should_close_db = False
@@ -71,6 +72,8 @@ def job_send_lifecycle_notifications(db: Session = None) -> Dict[str, Any]:
 
         for notif in pending_notifications:
             sub = notif.subscription
+            if not recommendation_available(sub, today):
+                continue
             user = sub.user
             current_plan = sub.plan
 
@@ -80,8 +83,7 @@ def job_send_lifecycle_notifications(db: Session = None) -> Dict[str, Any]:
                 target_months=sub.target_months,
                 db=db
             )
-            if recommended_plan:
-                notif.recommended_plan_id = recommended_plan.plan_id
+            notif.recommended_plan_id = recommended_plan.plan_id if recommended_plan else None
 
             # 2. 멀티채널 알림 발송
             dispatch_res = NotificationDispatcher.dispatch(

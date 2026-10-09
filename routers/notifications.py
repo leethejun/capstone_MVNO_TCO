@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/notifications", tags=["Notifications & Scheduler
 def trigger_notification_batch(db: Session = Depends(get_db)):
     """
     매일 자정에 동작하는 환승 알림 배치 작업을 즉시 실행합니다.
-    - D-14, D-7, D-3 도래 대상자 조회
+    - 유지기간 종료 한 달 전·일주일 전·하루 전 도래 대상자 조회
     - TCO 최저가 대체 요금제 자동 추천
     - 알림 발송 및 PENDING -> SENT 상태 갱신
     """

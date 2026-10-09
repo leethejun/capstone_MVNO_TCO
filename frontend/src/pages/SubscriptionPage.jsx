@@ -1,10 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { getUserSubscriptions } from '../api';
-import { Calendar, CheckCircle2, Clock, ShieldAlert, PlusCircle } from 'lucide-react';
+import { getUserSubscriptions, deleteSubscription } from '../api';
+import { Calendar, CheckCircle2, Clock, ShieldAlert, PlusCircle, Trash2 } from 'lucide-react';
 
 export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpenUserModal }) {
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleDelete = async (sub) => {
+    if (!window.confirm('이 요금제를 삭제할까요? 관련 환승 알림도 함께 삭제됩니다.')) return;
+    setDeletingId(sub.subscription_id);
+    setDeleteError('');
+    try {
+      await deleteSubscription({ subscriptionId: sub.subscription_id, userId: currentUser.user_id });
+      setSubscriptions((items) => items.filter((item) => item.subscription_id !== sub.subscription_id));
+    } catch (err) {
+      setDeleteError(err.message || '요금제 삭제 실패');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const loadData = async () => {
     if (!currentUser) {
@@ -34,7 +50,7 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
           <Calendar className="w-7 h-7" />
         </div>
         <h3 className="font-bold text-base text-slate-900 mb-1">로그인이 필요합니다</h3>
-        <p className="text-xs text-slate-500 mb-5">내 요금제의 프로모션 만료일과 D-Day 환승 알림을 확인하세요.</p>
+        <p className="text-xs text-slate-500 mb-5">내 요금제의 유지기간 종료일과 환승 알림을 확인하세요.</p>
         <button
           onClick={onOpenUserModal}
           className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-xs shadow-md transition"
@@ -61,7 +77,7 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
       <div className="flex items-center justify-between px-1">
         <div>
           <h2 className="font-bold text-base text-slate-900">내 요금제 생애주기 관리</h2>
-          <p className="text-xs text-slate-500">프로모션 만료 전 최적의 타이밍에 알림을 드립니다</p>
+          <p className="text-xs text-slate-500">유지기간 종료 한 달 전·일주일 전·하루 전에 알림을 드립니다</p>
         </div>
         <button
           onClick={onNavigateToRank}
@@ -72,6 +88,7 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
         </button>
       </div>
 
+      {deleteError && <p role="alert" className="text-xs text-rose-600">{deleteError}</p>}
       {loading ? (
         <div className="py-20 text-center text-slate-400 text-xs">
           <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
@@ -84,7 +101,7 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
           </div>
           <h4 className="font-bold text-sm text-slate-800 mb-1">등록된 요금제가 없습니다</h4>
           <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-            현재 이용 중인 요금제를 등록하면,<br />할인 종료 전 위약금 없는 최적의 환승 요금제를 추천해 드립니다.
+            현재 이용 중인 요금제를 등록하면,<br />선택한 유지기간 종료 한 달 전부터 최적의 환승 요금제를 추천해 드립니다.
           </p>
           <button
             onClick={onNavigateToRank}
@@ -95,7 +112,7 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
         </div>
       ) : (
         subscriptions.map((sub) => {
-          const dDay = calculateDday(sub.discount_end_date);
+          const dDay = calculateDday(sub.target_end_date);
           const isUrgent = dDay <= 7 && dDay >= 0;
           const isExpired = dDay < 0;
           const plan = sub.plan || {};
@@ -124,17 +141,17 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
                   )}
                   <div>
                     <span className="text-[11px] font-medium block">
-                      {isExpired ? '할인이 이미 만료되었습니다!' : '프로모션 할인 만료까지'}
+                      {isExpired ? '선택한 유지기간이 종료되었습니다' : '선택한 유지기간 종료까지'}
                     </span>
                     <span className="font-black text-lg leading-none">
-                      {isExpired ? `D+${Math.abs(dDay)}일 경과` : dDay === 0 ? 'D-Day (오늘 만료)' : `D-${dDay}일`}
+                      {isExpired ? `D+${Math.abs(dDay)}일 경과` : dDay === 0 ? 'D-Day (오늘 종료)' : `D-${dDay}일`}
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right text-[11px]">
-                  <span className="text-slate-500 block">할인 종료일</span>
-                  <span className="font-bold text-slate-800">{sub.discount_end_date}</span>
+                  <span className="text-slate-500 block">유지기간 종료일</span>
+                  <span className="font-bold text-slate-800">{sub.target_end_date}</span>
                 </div>
               </div>
 
@@ -158,7 +175,7 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
 
                 {/* 만료 후 요금 인상 경고문 */}
                 <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between px-1">
-                  <span>할인 기간: {plan.discount_months || 12}개월간</span>
+                  <span>{plan.discount_months === -1 ? '평생 할인' : `할인 종료일: ${sub.discount_end_date}`}</span>
                   {normalPrice > discountPrice && (
                     <span className="text-rose-500 font-semibold">
                       만료 후 월 {(normalPrice - discountPrice).toLocaleString()}원 추가 청구
@@ -167,6 +184,18 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
                 </div>
               </div>
 
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-slate-500">유지기간 {sub.target_months}개월</span>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(sub)}
+                  disabled={deletingId !== null}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {deletingId === sub.subscription_id ? '삭제 중...' : '요금제 삭제'}
+                </button>
+              </div>
               {/* 환승 알림 스케줄 타임라인 */}
               <div className="pt-3 border-t border-slate-100">
                 <span className="text-xs font-bold text-slate-800 mb-2.5 block">환승 알림 예약 현황</span>
@@ -174,7 +203,8 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
                   {notifications.map((notif) => {
                     const isSent = notif.status === 'SENT';
                     const noticeTitle =
-                      notif.notice_type === 'D_14' ? 'D-14 사전탐색' : notif.notice_type === 'D_7' ? 'D-7 준비' : 'D-3 즉시환승';
+                      ({ MONTH_BEFORE: '한 달 전', 'D-7': '일주일 전', 'D-1': '하루 전',
+                         'D-14': '이전 D-14', 'D-3': '이전 D-3' })[notif.notice_type] || notif.notice_type;
 
                     return (
                       <div

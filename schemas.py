@@ -65,6 +65,7 @@ class NotificationResponse(BaseModel):
     subscription_id: int
     notice_type: NoticeType
     recommended_plan_id: Optional[int] = None
+    recommended_plan: Optional[PlanResponse] = None
     scheduled_date: date
     sent_at: Optional[datetime] = None
     status: NotificationStatus
@@ -84,6 +85,9 @@ class SubscriptionResponse(BaseModel):
     start_date: date
     target_months: int
     discount_end_date: date
+    target_end_date: Optional[date] = None
+    recommendation_start_date: Optional[date] = None
+    recommendation_available: bool = False
     status: SubscriptionStatus
     created_at: datetime
     plan: Optional[PlanResponse] = None

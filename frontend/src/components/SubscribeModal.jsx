@@ -51,7 +51,7 @@ export default function SubscribeModal({ isOpen, onClose, plan, currentUser, onS
           </div>
           <div>
             <h3 className="font-bold text-base text-slate-900">내 요금제 개통 등록</h3>
-            <p className="text-xs text-slate-500">프로모션 만료 환승 알림이 자동 예약됩니다</p>
+            <p className="text-xs text-slate-500">유지기간 종료 전 환승 알림이 자동 예약됩니다</p>
           </div>
         </div>
 
@@ -101,7 +101,7 @@ export default function SubscribeModal({ isOpen, onClose, plan, currentUser, onS
           </div>
 
           <div className="p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-xl text-[11px] text-indigo-800 leading-relaxed">
-            🔔 <strong>안내:</strong> 개통 등록 시 프로모션 종료 기준 <strong>D-14, D-7, D-3일</strong>에 최적의 대체 요금제 자동 추천 알림이 스케줄링됩니다.
+            🔔 <strong>안내:</strong> 개통 등록 시 선택한 유지기간 종료 <strong>한 달 전·일주일 전·하루 전</strong>에 환승 알림이 예약됩니다. 추천 요금제는 유지기간 종료 한 달 전부터 표시됩니다.
           </div>
 
           {error && <p className="text-[11px] text-rose-500">{error}</p>}
