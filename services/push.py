@@ -18,6 +18,7 @@ def register_device(data, user, db):
     if not device:
         device = PushDevice(user_id=user.user_id, installation_id=data.installation_id)
         db.add(device)
+    device.language = data.language
     device.token = data.token
     device.token_hash = token_hash
     device.is_active = True
@@ -37,7 +38,7 @@ def unregister_device(installation_id, user, db):
     return {'removed': True}
 
 
-def send_to_devices(notification, user, title, body, db: Session):
+def send_to_devices(notification, user, title, body, db: Session, english_message=None):
     from firebase_admin import messaging
     devices = db.query(PushDevice).filter(PushDevice.user_id == user.user_id, PushDevice.is_active == True).all()
     result = {'sent': 0, 'failed': 0, 'invalid': 0, 'devices': len(devices)}
@@ -47,10 +48,11 @@ def send_to_devices(notification, user, title, body, db: Session):
         if delivery and delivery.delivered_at:
             result['sent'] += 1
             continue
+        device_title, device_body = english_message if device.language == "en" and english_message else (title, body)
         try:
             # data-only 메시지는 서비스 워커가 한 번만 표시하도록 한다.
             messaging.send(messaging.Message(token=device.token, data={
-                'title': title, 'body': body, 'notification_id': str(notification.notification_id),
+                'title': device_title, 'body': device_body, 'notification_id': str(notification.notification_id),
                 'url': '/', 'tag': f'notification-{notification.notification_id}'
             }, webpush=messaging.WebpushConfig(headers={'TTL': '86400', 'Urgency': 'normal'})), app=firebase_app())
         except messaging.UnregisteredError:

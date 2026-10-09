@@ -88,6 +88,24 @@ class FirebasePushTests(unittest.TestCase):
         self.assertEqual(send.call_count, 1)
         self.assertEqual(send.call_args.args[0].token, 'token-one-' * 5)
 
+    def test_device_language_can_change_and_selects_english_payload(self):
+        self.register()
+        register_device(PushDeviceInput(installation_id='installation-one', token='token-one-' * 5, language='en'), self.user, self.db)
+        with patch('services.push.firebase_app', return_value=object()), patch('firebase_admin.messaging.send', return_value='sent') as send:
+            send_to_devices(self.notice, self.user, '한국어 제목', '한국어 내용', self.db, english_message=('English title', 'English body'))
+        self.assertEqual(send.call_args.args[0].data['title'], 'English title')
+        self.assertEqual(send.call_args.args[0].data['body'], 'English body')
+        self.assertEqual(self.db.query(PushDevice).count(), 1)
+
+    def test_english_reminder_keeps_original_plan_names(self):
+        from services.notifier import NotificationDispatcher
+        plan = self.notice.subscription.plan
+        plan.title = '한국어 요금제 7GB+'
+        title, body = NotificationDispatcher._build_message(NoticeType.MONTH_BEFORE, plan, date(2027, 1, 1), plan, language='en')
+        self.assertIn('one month', title)
+        self.assertEqual(body.count(plan.title), 2)
+        self.assertIn('KRW/mo', body)
+
     def test_unregistered_token_disabled(self):
         from firebase_admin.messaging import UnregisteredError
         self.register()

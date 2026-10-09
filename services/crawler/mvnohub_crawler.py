@@ -31,6 +31,7 @@ class MvnohubCrawler(BaseCrawler):
     def __init__(self, timeout: int = 20, delay_sec: float = 0.5):
         self.timeout = timeout
         self.delay_sec = delay_sec
+        self.errors = []
 
     def fetch_raw_plans(self, max_pages: int = 0) -> List[Dict[str, Any]]:
         """
@@ -38,6 +39,7 @@ class MvnohubCrawler(BaseCrawler):
         :param max_pages: 수집할 최대 페이지 수 (0이면 전체 전수 수집)
         :return: 중복 제거된 요금제 딕셔너리 리스트
         """
+        self.errors = []
         results: List[Dict[str, Any]] = []
         seen_product_ids: Set[str] = set()
         page = 0
@@ -142,16 +144,19 @@ class MvnohubCrawler(BaseCrawler):
                     time.sleep(self.delay_sec)
 
             except requests.exceptions.RequestException as e:
+                self.errors.append({"page": page, "error": str(e)})
                 print(f"[MvnohubCrawler] 페이지 {page} 네트워크 오류: {e}")
                 consecutive_empty += 1
                 page += 1
                 time.sleep(self.delay_sec * 2)
                 continue
             except Exception as e:
+                self.errors.append({"page": page, "error": str(e)})
                 print(f"[MvnohubCrawler] 페이지 {page} 파싱 오류: {e}")
                 page += 1
                 continue
 
+        self.complete = max_pages == 0 and page >= total_pages and not self.errors
         # _product_id 필드 제거 (내부 용도)
         for plan in results:
             plan.pop("_product_id", None)
@@ -189,6 +194,20 @@ class MvnohubCrawler(BaseCrawler):
             return ""
         norm = unicodedata.normalize("NFKC", text)
         return re.sub(r"\s+", " ", norm).strip()
+
+    @staticmethod
+    def lifetime_prices(card, current):
+        # 허브의 기본료와 기간 제한 없는 요금 할인은 별도 속성이다.
+        try:
+            base = int(card.get('data-fee', ''))
+            reduction = int(card.get('data-plan-discount-amount', '') or 0)
+        except (TypeError, ValueError):
+            return None
+        has_period = card.get('data-discount-period-in-month') or card.get('data-contract-discount-period')
+        has_event = card.get('data-event-fee') or card.get('data-additional-event-fee')
+        if not has_period and not has_event and reduction > 0 and base - reduction == current:
+            return base, -1
+        return None
 
     def _parse_card(self, card) -> Dict[str, Any]:
         """요금제 카드 HTML에서 정보 추출"""
@@ -248,6 +267,10 @@ class MvnohubCrawler(BaseCrawler):
             month_match = re.search(r"(\d+)\s*개월", after_text)
             if month_match:
                 discount_months = int(month_match.group(1))
+
+        lifetime = self.lifetime_prices(card, discount_price)
+        if lifetime:
+            normal_price, discount_months = lifetime
 
         # 7. QoS 속도 (data-data-after 속성에서도 추출)
         data_after = card.get("data-data-after", "")

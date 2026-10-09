@@ -7,9 +7,9 @@
 
 - 프론트엔드: `/srv/alddle-tco/current`의 React 빌드 파일
 - API: nginx의 `/api/` → `http://127.0.0.1:8000/api/`
-- 사이트 전체(HTML, 정적 파일, API): HTTPS + Basic 인증
-- 앱 백엔드만 `127.0.0.1:8000`에 바인딩. 외부에서 비밀번호를 우회해 API에 접근하지 못합니다.
-- 개발 환경은 로컬 Vite `/api` proxy를 사용합니다. 개발 서버도 `127.0.0.1:5173`에 바인딩해 사이트 비밀번호를 우회하는 외부 경로를 만들지 않습니다.
+- 공개 페이지·랭킹: HTTPS, 사용자 API: Google 인증 및 본인 계정 확인
+- 앱 백엔드만 `127.0.0.1:8000`에 바인딩. 외부에 백엔드 포트를 직접 노출하지 않습니다.
+- 개발 환경은 로컬 Vite `/api` proxy를 사용합니다. 개발 서버도 `127.0.0.1:5173`에 바인딩해 외부에 개발 서버를 노출하지 않습니다.
 - TLS 인증서: 별도 서브도메인 인증서를 webroot 방식으로 발급합니다.
   Certbot nginx 플러그인을 쓰지 않아 기존 도메인 설정을 자동 편집하지 않습니다.
 - nginx는 `nginx -t` 성공 후 reload합니다. stop/restart하지 않습니다.
@@ -40,18 +40,17 @@ npm run build --prefix frontend
 sudo bash deploy/install-host.sh
 ```
 
-사이트 접속 계정/비밀번호는 설치 중 직접 지정합니다.
 Certbot이 요구하면 인증서 계정 이메일과 약관에 응답합니다.
 설치 중에는 새 도메인의 ACME 경로만 열고 앱은 404로 유지합니다.
-인증서 발급이 끝나면 HTTPS/비밀번호 설정을 활성화합니다.
+인증서 발급이 끝나면 HTTPS 설정을 활성화합니다.
 설정 검사나 발급 실패 시 이번에 추가한 nginx 파일을 제거하고 기존 설정으로 reload합니다.
-배포 파일은 보존하며, 이번에 생성한 인증 파일과 current 링크는 해제해 재시도가 가능하게 합니다.
+배포 파일은 보존하며, 이번에 생성한 current 링크는 해제해 재시도가 가능하게 합니다.
 첫 배포 전용 스크립트이므로 기존 앱 배포가 있으면 덮어쓰지 않고 중단합니다.
 
 ## 3. 확인
 
-- `https://alddletco.bulldog-walker.com`에서 비밀번호 입력 후 랭킹 확인
-- 비밀번호 없이 HTML/API 요청 시 401인지 확인
+- `https://alddletco.bulldog-walker.com`에서 로그인 없이 랭킹 확인
+- HTML·랭킹은 200, 토큰 없는 `/api/users/me` 요청은 401인지 확인
 - 블로그, `chat.bulldog-walker.com`, `comments.bulldog-walker.com`도 확인
 
 ```bash
@@ -83,9 +82,9 @@ sudo bash deploy/update-frontend.sh
 
 ## 적용 범위와 남은 단계
 
-준비 시 프론트엔드 빌드, 임시 nginx의 HTTPS/Basic 인증/API 전달 테스트를 통과했습니다.
+준비 시 프론트엔드 빌드, 임시 nginx의 HTTPS/API 전달 테스트를 통과했습니다.
 백엔드 이미지의 누락된 requests 의존성도 재빌드로 복구했습니다.
 실제 호스트 nginx 파일 설치 및 공인 TLS 발급은 sudo 권한/DNS 설정 후 실행해야 합니다.
-사이트 전체 비밀번호는 앱 내부 사용자별 로그인 기능과 별개입니다.
+사이트 전체 Basic 인증은 제거되었습니다. 기존 배포에는 `sudo bash deploy/remove-basic-auth.sh`를 실행하세요.
 
 참고: [nginx reload 동작](https://nginx.org/en/docs/beginners_guide.html#control), [proxy_pass 경로 처리](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass).

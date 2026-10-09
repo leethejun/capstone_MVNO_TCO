@@ -1,3 +1,4 @@
+import { translate as t, getLocale } from './i18n/core';
 import { getMessaging, getToken, deleteToken, isSupported, onMessage } from 'firebase/messaging';
 import { getApp } from 'firebase/app';
 import { auth, authHeaders } from './firebase';
@@ -11,29 +12,29 @@ function installationId() {
   return id;
 }
 async function messagingInstance() {
-  if (!auth || !await isSupported()) throw new Error('이 브라우저는 푸시 알림을 지원하지 않습니다. 아이폰은 홈 화면에 앱을 추가한 뒤 이용해주세요.');
+  if (!auth || !await isSupported()) throw new Error(t("이 브라우저는 푸시 알림을 지원하지 않습니다. 아이폰은 홈 화면에 앱을 추가한 뒤 이용해주세요."));
   return getMessaging(getApp());
 }
 async function registerToken(requestPermission) {
-  if (!auth?.currentUser) throw new Error('Google 로그인 후 알림을 켜주세요.');
-  if (!('Notification' in window)) throw new Error('이 브라우저는 알림을 지원하지 않습니다.');
+  if (!auth?.currentUser) throw new Error(t("Google 로그인 후 알림을 켜주세요."));
+  if (!('Notification' in window)) throw new Error(t("이 브라우저는 알림을 지원하지 않습니다."));
   const permission = requestPermission ? await Notification.requestPermission() : Notification.permission;
-  if (permission !== 'granted') throw new Error('브라우저 알림 권한을 허용해주세요.');
+  if (permission !== 'granted') throw new Error(t("브라우저 알림 권한을 허용해주세요."));
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-  if (!vapidKey) throw new Error('푸시 알림 설정을 준비 중입니다.');
+  if (!vapidKey) throw new Error(t("푸시 알림 설정을 준비 중입니다."));
   const messaging = await messagingInstance();
   const script = import.meta.env.DEV ? '/src/firebase-messaging-sw.js' : '/firebase-messaging-sw.js';
   const registration = await navigator.serviceWorker.register(script, { type: 'module', scope: '/' });
   await navigator.serviceWorker.ready;
   const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
-  if (!token) throw new Error('기기 등록에 실패했습니다. 다시 시도해주세요.');
+  if (!token) throw new Error(t("기기 등록에 실패했습니다. 다시 시도해주세요."));
   const response = await fetch(`${base}/push/devices`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...await authHeaders() },
-    body: JSON.stringify({ installation_id: installationId(), token }),
+    body: JSON.stringify({ installation_id: installationId(), token, language: getLocale() }),
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || '알림 기기 등록 실패');
+    throw new Error(t(error.detail) || t("알림 기기 등록 실패"));
   }
   return true;
 }
@@ -55,7 +56,7 @@ export async function disablePush() {
       headers: { 'Content-Type': 'application/json', ...await authHeaders() },
       body: JSON.stringify({ installation_id: id }),
     });
-    if (!response.ok) throw new Error('알림 기기 연결을 해제하지 못했습니다. 다시 시도해주세요.');
+    if (!response.ok) throw new Error(t("알림 기기 연결을 해제하지 못했습니다. 다시 시도해주세요."));
   }
   localStorage.setItem(disabledKey, '1');
   if (auth && await isSupported()) await deleteToken(getMessaging(getApp()));
@@ -67,7 +68,7 @@ export async function watchForegroundPush(callback) {
     const data = payload.data || {};
     const registration = await navigator.serviceWorker.getRegistration('/');
     if (registration && Notification.permission === 'granted') {
-      await registration.showNotification(data.title || '알뜰알뜰 환승 알림', {
+      await registration.showNotification(data.title || t("알뜰알뜰 환승 알림"), {
         body: data.body || '', tag: data.tag || 'alddle-transfer', icon: '/favicon.svg',
         data: { url: '/#notifications' },
       });
@@ -79,6 +80,6 @@ export async function watchForegroundPush(callback) {
 export async function sendTestPush() {
   const response = await fetch(`${base}/push/test`, { method: 'POST', headers: await authHeaders() });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.detail || '테스트 알림 전송 실패');
+  if (!response.ok) throw new Error(t(result.detail) || t("테스트 알림 전송 실패"));
   return result;
 }

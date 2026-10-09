@@ -31,3 +31,6 @@ secrets/
 *service-account*.json
 *firebase-adminsdk*.json
 firebase.txt
+
+# Local crawler execution reports
+runtime/

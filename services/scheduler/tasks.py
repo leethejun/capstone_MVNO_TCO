@@ -17,7 +17,7 @@ def job_crawl_mvno_plans() -> Dict[str, Any]:
     print(f"\n[Scheduler] 새벽 02:00 정기 크롤링 작업 시작: {datetime.now()}")
     db = SessionLocal()
     try:
-        # 전수 정기 수집 (69페이지 + 25개 사업자 공식몰 전체)
+        # 허브 전체 페이지와 허브·마스터 사업자 공식몰 수집 후 추천 목록 교체
         stats = run_comprehensive_crawler_pipeline(max_pages=0, include_direct=True, db=db)
         print(f"[Scheduler] 정기 크롤링 완료: {stats}")
         return stats

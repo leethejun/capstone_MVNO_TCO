@@ -26,7 +26,7 @@ trap restore_on_error ERR
 docker exec alddle_mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --single-transaction --no-tablespaces --set-gtid-purged=OFF "$MYSQL_DATABASE"' > "$BACKUP_DIR/database.sql"
 chmod 600 "$BACKUP_DIR/database.sql"
 docker compose run --rm --no-deps backend python -B -m deploy.migrate_firebase
-docker compose up -d --no-deps backend
+docker compose up -d --no-deps --force-recreate backend
 healthy=false
 for attempt in {1..20}; do
     if curl --fail --silent http://127.0.0.1:8000/health/db >/dev/null; then healthy=true; break; fi

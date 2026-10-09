@@ -1,3 +1,4 @@
+import { useI18n } from './i18n/hooks';
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
@@ -11,6 +12,8 @@ import { observeAuth } from './firebase';
 import { refreshPush } from './push';
 
 export default function App() {
+  const { t, locale } = useI18n();
+  useEffect(() => { refreshPush().catch(() => {}); }, [locale]);
   const [activeTab, setActiveTab] = useState(window.location.hash === '#notifications' ? 'notification' : 'rank'); // 'rank' | 'subscription' | 'notification'
   const [currentUser, setCurrentUser] = useState(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -50,7 +53,7 @@ export default function App() {
         {/* 상단 앱 바 */}
         <Header user={currentUser} onOpenUserModal={() => setIsUserModalOpen(true)} />
 
-        {authError && <p role="alert" className="px-4 py-2 text-xs text-rose-600">{authError}</p>}
+        {authError && <p role="alert" className="px-4 py-2 text-xs text-rose-600">{t(authError)}</p>}
         {/* 메인 화면 영역 */}
         <main className="flex-1 overflow-y-auto">
           {activeTab === 'rank' && (

@@ -114,6 +114,7 @@ class PushDevice(Base):
     device_id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
     installation_id = Column(String(64), nullable=False, unique=True)
+    language = Column(String(2), default="ko", nullable=False)
     token = Column(String(2048), nullable=False)
     token_hash = Column(String(64), unique=True, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)

@@ -30,7 +30,8 @@ def test_push(user: User = Depends(get_current_user), db: Session = Depends(get_
     for device in devices:
         try:
             messaging.send(messaging.Message(token=device.token, data={
-                'title': '알뜰알뜰 테스트 알림', 'body': '환승 알림을 받을 준비가 완료되었습니다.',
+                'title': 'Alddle test notification' if device.language == 'en' else '알뜰알뜰 테스트 알림',
+                'body': 'You are ready to receive switching reminders.' if device.language == 'en' else '환승 알림을 받을 준비가 완료되었습니다.',
                 'tag': 'alddle-test', 'url': '/'
             }), app=firebase_app())
             sent += 1

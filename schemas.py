@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional, List
+from typing import Literal, Optional, List
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from models import SubscriptionStatus, NoticeType, NotificationStatus
 
@@ -95,6 +95,7 @@ class SubscriptionResponse(BaseModel):
 
 
 class PushDeviceInput(BaseModel):
+    language: Literal["ko", "en"] = "ko"
     installation_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     token: str = Field(min_length=20, max_length=2048)
 

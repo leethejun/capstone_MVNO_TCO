@@ -18,6 +18,12 @@ def migrate():
             if 'push_attempts' not in notifications:
                 connection.execute(text('ALTER TABLE notifications ADD COLUMN push_attempts INT NOT NULL DEFAULT 0'))
     Base.metadata.create_all(engine, tables=[PushDevice.__table__, PushDelivery.__table__])
+    if engine.dialect.name == 'mysql':
+        with engine.begin() as connection:
+            connection.execute(text('SET SESSION lock_wait_timeout = 10'))
+            columns = {column['name'] for column in inspect(connection).get_columns('push_devices')}
+            if 'language' not in columns:
+                connection.execute(text("ALTER TABLE push_devices ADD COLUMN language VARCHAR(2) NOT NULL DEFAULT 'ko'"))
     print('Firebase UID / push device / delivery migration complete')
 
 

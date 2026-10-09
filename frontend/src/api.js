@@ -1,3 +1,4 @@
+import { translate as t } from './i18n/core';
 import { authHeaders } from './firebase';
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 
@@ -24,7 +25,7 @@ export async function fetchPlansRank({
   params.append("limit", limit);
 
   const res = await fetch(`${API_BASE}/plans/rank?${params.toString()}`);
-  if (!res.ok) throw new Error("요금제 랭킹 조회 실패");
+  if (!res.ok) throw new Error(t("요금제 랭킹 조회 실패"));
   return res.json();
 }
 
@@ -32,7 +33,7 @@ export async function getMe() {
   const res = await fetch(`${API_BASE}/users/me`, { headers: await authHeaders() });
   if (!res.ok) {
     const error = await res.json().catch(() => ({}));
-    throw new Error(error.detail || '계정 연결 실패');
+    throw new Error(t(error.detail) || t("계정 연결 실패"));
   }
   return res.json();
 }
@@ -41,13 +42,13 @@ export async function updatePreferences(defaultTargetMonths) {
     headers: { 'Content-Type': 'application/json', ...await authHeaders() },
     body: JSON.stringify({ default_target_months: defaultTargetMonths }),
   });
-  if (!res.ok) throw new Error('이용 주기 저장 실패');
+  if (!res.ok) throw new Error(t("이용 주기 저장 실패"));
   return res.json();
 }
 
 export async function getUserSubscriptions(userId) {
   const res = await fetch(`${API_BASE}/subscriptions/user/${userId}`, { headers: await authHeaders() });
-  if (!res.ok) throw new Error("구독 요금제 조회 실패");
+  if (!res.ok) throw new Error(t("구독 요금제 조회 실패"));
   return res.json();
 }
 
@@ -64,7 +65,7 @@ export async function createSubscription({ userId, planId, startDate, targetMont
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "요금제 개통 등록 실패");
+    throw new Error(t(err.detail) || t("요금제 개통 등록 실패"));
   }
   return res.json();
 }
@@ -73,13 +74,13 @@ export async function triggerNotificationBatch() {
   const res = await fetch(`${API_BASE}/notifications/trigger-batch`, {
     method: "POST", headers: await authHeaders(),
   });
-  if (!res.ok) throw new Error("알림 배치 실행 실패");
+  if (!res.ok) throw new Error(t("알림 배치 실행 실패"));
   return res.json();
 }
 
 export async function getCrawlerStatus() {
   const res = await fetch(`${API_BASE}/crawler/status`);
-  if (!res.ok) throw new Error("크롤러 상태 조회 실패");
+  if (!res.ok) throw new Error(t("크롤러 상태 조회 실패"));
   return res.json();
 }
 
@@ -88,6 +89,6 @@ export async function deleteSubscription({ subscriptionId, userId }) {
   const res = await fetch(`${API_BASE}/subscriptions/${subscriptionId}?${params}`, { method: "DELETE", headers: await authHeaders() });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "요금제 삭제 실패");
+    throw new Error(t(err.detail) || t("요금제 삭제 실패"));
   }
 }

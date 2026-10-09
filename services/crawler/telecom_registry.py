@@ -1,9 +1,11 @@
+import re
+from urllib.parse import urlparse
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
-from models import Telecom
+from models import Telecom, Plan
 from database import SessionLocal
 
-# 나무위키 "통신회사/MVNO 통신사 목록/대한민국" 기준 전체 알뜰폰 통신사 마스터 데이터
+# 수동 관리하는 통신사 마스터. 나무위키 실시간 수집 또는 전체 사업자 보장을 의미하지 않는다.
 MASTER_TELECOMS: List[Dict[str, str]] = [
     # 1. 이동통신사 자회사
     {"name": "SK 7mobile", "website_url": "https://www.sk7mobile.com", "network": "SKT"},
@@ -37,7 +39,6 @@ MASTER_TELECOMS: List[Dict[str, str]] = [
     {"name": "친구모바일", "website_url": "https://chingumobile.com", "network": "3사망"},
     {"name": "에스원 안심모바일", "website_url": "http://www.s1mobile.co.kr", "network": "3사망"},
     {"name": "밸류컴", "website_url": "https://valuecomm.co.kr", "network": "3사망"},
-    {"name": "앤텔레콤", "website_url": "https://www.n-telecom.co.kr", "network": "3사망"},
     {"name": "도시락모바일", "website_url": "https://www.dosirakmobile.com", "network": "3사망"},
     {"name": "아정당모바일", "website_url": "https://www.ajd.co.kr/phone/mvno", "network": "3사망"},
     {"name": "플래시모바일", "website_url": "https://www.flashmobile.kr", "network": "3사망"},
@@ -69,7 +70,23 @@ MASTER_TELECOMS: List[Dict[str, str]] = [
     {"name": "원텔레콤", "website_url": "https://onetelecom.co.kr", "network": "LGU+"},
 ]
 
-def sync_telecom_master(db: Session = None) -> Dict[str, Any]:
+# 허브 법인명과 공식 브랜드명을 명시적으로 연결한다. 유사 문자열 추측은 하지 않는다.
+TELECOM_ALIASES = {
+    'KB국민은행': 'KB리브모바일', 'LG헬로모바일': '헬로모바일',
+    '에스케이텔링크': 'SK 7mobile', 'KCT (티플러스)': '티플러스',
+    '케이티엠모바일': 'KT M모바일', '유니컴즈': '모빙',
+    '케이티스카이라이프': 'KT스카이라이프', '큰사람커넥트': '이야기모바일',
+    '고고팩토리': '고고모바일(고고팩토리)', '마블프로듀스': '마블링',
+    '스테이지파이브': '핀다이렉트', '프리티 (SKT, KT망)': '프리티',
+    '프리티 (LGU+망)': '프리티',
+}
+
+
+def canonical_telecom_name(name):
+    return TELECOM_ALIASES.get(name.strip(), name.strip())
+
+
+def sync_telecom_master(db: Session = None, commit: bool = True) -> Dict[str, Any]:
     """
     나무위키 40+개 알뜰폰 통신사 마스터 데이터를 DB telecoms 테이블과 동기화(Upsert)합니다.
     """
@@ -87,10 +104,7 @@ def sync_telecom_master(db: Session = None) -> Dict[str, Any]:
             logo = f"https://logo.clearbit.com/{url.replace('https://', '').replace('http://', '').split('/')[0]}"
 
             # 기존 이름이나 유사 이름 검색 (예: 프리티, A모바일 등)
-            existing = db.query(Telecom).filter(
-                (Telecom.name == name) |
-                (Telecom.name.ilike(f"%{name[:3]}%"))
-            ).first()
+            existing = db.query(Telecom).filter(Telecom.name == name).first()
 
             if existing:
                 if not existing.website_url:
@@ -103,7 +117,16 @@ def sync_telecom_master(db: Session = None) -> Dict[str, Any]:
                 db.add(new_t)
                 stats["inserted"] += 1
 
-        db.commit()
+        db.flush()
+        for alias, canonical in TELECOM_ALIASES.items():
+            source = db.query(Telecom).filter(Telecom.name == alias).first()
+            target = db.query(Telecom).filter(Telecom.name == canonical).first()
+            if source and target and source.telecom_id != target.telecom_id:
+                # 상품 ID를 유지하므로 구독과 알림 참조를 보존한다.
+                db.query(Plan).filter(Plan.telecom_id == source.telecom_id).update(
+                    {Plan.telecom_id: target.telecom_id}, synchronize_session=False)
+        if commit:
+            db.commit()
     except Exception as e:
         db.rollback()
         print(f"[TelecomRegistry] 동기화 에러: {e}")
@@ -117,3 +140,10 @@ def sync_telecom_master(db: Session = None) -> Dict[str, Any]:
 if __name__ == "__main__":
     result = sync_telecom_master()
     print("통신사 마스터 동기화 완료:", result)
+
+
+def is_excluded_telecom(name, website_url=''):
+    """사용자가 명시적으로 제외한 사업자는 허브/공식몰 어느 경로로도 재등록하지 않는다."""
+    normalized=re.sub(r'\s+', '', (name or '').replace('(주)', '').replace('㈜', '')).lower()
+    host=urlparse(website_url or '').hostname or ''
+    return normalized in {'앤텔레콤','엔텔레콤','ntelecom','앤알커뮤니케이션','주식회사앤알커뮤니케이션'} or host=='n-telecom.co.kr' or host.endswith('.n-telecom.co.kr')

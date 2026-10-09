@@ -77,7 +77,8 @@ class NotificationDispatcher:
 
         # 사용자별 여러 기기에 실제 FCM 발송. 토큰 보유만으로 성공 처리하지 않는다.
         if db is not None:
-            push_result = send_to_devices(notification, user, title, body, db)
+            english_message = cls._build_message(notification.notice_type, current_plan, target_end_date(subscription), recommended_plan, language="en")
+            push_result = send_to_devices(notification, user, title, body, db, english_message=english_message)
             dispatch_result['push'] = push_result
             dispatch_result['fcm_sent'] = push_result['sent'] > 0
 
@@ -89,8 +90,18 @@ class NotificationDispatcher:
         notice_type: NoticeType,
         current_plan: Plan,
         end_date,
-        rec_plan: Optional[Plan]
+        rec_plan: Optional[Plan],
+        language="ko"
     ) -> (str, str):
+        if language == "en":
+            timing = {NoticeType.MONTH_BEFORE: "one month", NoticeType.D_7: "7 days", NoticeType.D_1: "1 day",
+                      NoticeType.D_14: "14 days", NoticeType.D_3: "3 days"}[notice_type]
+            title = f"Your switching date is {timing} away!"
+            recommendation = ""
+            if rec_plan:
+                telecom = rec_plan.telecom.name if rec_plan.telecom else "MVNO"
+                recommendation = f"\nLowest-TCO recommendation: [{telecom}] {rec_plan.title} ({rec_plan.discount_price:,} KRW/mo)"
+            return title, f"Your chosen usage period for '{current_plan.title}' ends on {end_date}.{recommendation}\nCompare plans before switching to save on mobile costs."
         timing = {NoticeType.MONTH_BEFORE: "한 달", NoticeType.D_7: "7일", NoticeType.D_1: "1일",
                   NoticeType.D_14: "14일", NoticeType.D_3: "3일"}[notice_type]
         title = f"요금제 유지기간 종료 {timing} 전입니다!"

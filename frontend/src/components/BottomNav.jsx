@@ -1,11 +1,13 @@
+import { useI18n } from '../i18n/hooks';
 import React from 'react';
 import { Search, CalendarCheck, BellRing } from 'lucide-react';
 
 export default function BottomNav({ activeTab, setActiveTab, unreadNotifCount = 0 }) {
+  const { t } = useI18n();
   const tabs = [
-    { id: 'rank', label: '요금제 랭킹', icon: Search },
-    { id: 'subscription', label: '내 요금제', icon: CalendarCheck },
-    { id: 'notification', label: '환승 알림', icon: BellRing, badge: unreadNotifCount },
+    { id: 'rank', label: t("요금제 랭킹"), icon: Search },
+    { id: 'subscription', label: t("내 요금제"), icon: CalendarCheck },
+    { id: 'notification', label: t("환승 알림"), icon: BellRing, badge: unreadNotifCount },
   ];
 
   return (
