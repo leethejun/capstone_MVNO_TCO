@@ -6,37 +6,37 @@ import SubscribeModal from './components/SubscribeModal';
 import RankPage from './pages/RankPage';
 import SubscriptionPage from './pages/SubscriptionPage';
 import NotificationPage from './pages/NotificationPage';
-import { getUser } from './api';
+import { getMe } from './api';
+import { observeAuth } from './firebase';
+import { refreshPush } from './push';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('rank'); // 'rank' | 'subscription' | 'notification'
+  const [activeTab, setActiveTab] = useState(window.location.hash === '#notifications' ? 'notification' : 'rank'); // 'rank' | 'subscription' | 'notification'
   const [currentUser, setCurrentUser] = useState(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedPlanForSubscribe, setSelectedPlanForSubscribe] = useState(null);
 
-  // 이전에 선택한 계정만 복원한다. 데모 계정은 사용자가 직접 선택한다.
+  const [authError, setAuthError] = useState('');
   useEffect(() => {
-    const savedUserId = localStorage.getItem('mvno_user_id');
-    if (!savedUserId) return;
-    const initUser = async () => {
+    let generation = 0;
+    const stop = observeAuth(async (firebaseUser) => {
+      const current = ++generation;
+      setCurrentUser(null);
+      setAuthError('');
+      localStorage.removeItem('mvno_user_id');
+      if (!firebaseUser) return;
       try {
-        const idToLoad = Number(savedUserId);
-        const user = await getUser(idToLoad);
+        const user = await getMe();
+        if (current !== generation) return;
         setCurrentUser(user);
-        localStorage.setItem('mvno_user_id', user.user_id);
+        await refreshPush().catch(() => {});
       } catch (err) {
-        console.log('초기 사용자 로드 실패, 신규 로그인 필요', err);
+        if (current === generation) setAuthError(err.message);
       }
-    };
-    initUser();
+    });
+    return () => { generation++; stop(); };
   }, []);
-
-  const handleSelectUser = (user) => {
-    setCurrentUser(user);
-    if (user && user.user_id) {
-      localStorage.setItem('mvno_user_id', user.user_id);
-    }
-  };
+  const handleSelectUser = (user) => setCurrentUser(user);
 
   const handleSubscribeSuccess = () => {
     // 개통 등록 성공 시 내 요금제 탭으로 이동
@@ -50,6 +50,7 @@ export default function App() {
         {/* 상단 앱 바 */}
         <Header user={currentUser} onOpenUserModal={() => setIsUserModalOpen(true)} />
 
+        {authError && <p role="alert" className="px-4 py-2 text-xs text-rose-600">{authError}</p>}
         {/* 메인 화면 영역 */}
         <main className="flex-1 overflow-y-auto">
           {activeTab === 'rank' && (

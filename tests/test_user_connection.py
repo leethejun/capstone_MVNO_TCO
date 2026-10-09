@@ -2,8 +2,7 @@ import unittest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import User
-from schemas import UserCreate
-from routers.users import create_user
+from services.auth import resolve_google_user
 
 
 class UserConnectionTests(unittest.TestCase):
@@ -20,20 +19,20 @@ class UserConnectionTests(unittest.TestCase):
         self.engine.dispose()
 
     def test_existing_email_returns_matching_account_not_demo(self):
-        user = create_user(UserCreate(email='member@example.com', default_target_months=6), self.db)
+        user = resolve_google_user({'uid': 'google-member', 'email': 'member@example.com', 'email_verified': True}, self.db)
         self.assertEqual(user.user_id, 2)
         self.assertEqual(user.default_target_months, 24)
         self.assertEqual(self.db.query(User).count(), 2)
 
     def test_email_case_and_surrounding_spaces(self):
-        user = create_user(UserCreate(email='  MEMBER@EXAMPLE.COM  '), self.db)
+        user = resolve_google_user({'uid': 'google-member', 'email': '  MEMBER@EXAMPLE.COM  ', 'email_verified': True}, self.db)
         self.assertEqual(user.user_id, 2)
 
     def test_new_email_created_once_then_reused(self):
-        first = create_user(UserCreate(email='new@example.com', default_target_months=36), self.db)
-        second = create_user(UserCreate(email='new@example.com'), self.db)
+        first = resolve_google_user({'uid': 'new-uid', 'email': 'new@example.com', 'email_verified': True}, self.db)
+        second = resolve_google_user({'uid': 'new-uid', 'email': 'new@example.com', 'email_verified': True}, self.db)
         self.assertEqual(first.user_id, second.user_id)
-        self.assertEqual(second.default_target_months, 36)
+        self.assertEqual(second.default_target_months, 12)
         self.assertEqual(self.db.query(User).count(), 3)
 
 

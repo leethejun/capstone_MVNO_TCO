@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Boolean, Text,
-    Numeric, Date, DateTime, ForeignKey, Enum as SQLEnum
+    Numeric, Date, DateTime, ForeignKey, UniqueConstraint, Enum as SQLEnum
 )
 from sqlalchemy.orm import relationship
 from database import Base
@@ -67,7 +67,8 @@ class User(Base):
 
     user_id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     email = Column(String(100), unique=True, nullable=False)
-    fcm_token = Column(String(255), nullable=True)
+    firebase_uid = Column(String(128), unique=True, nullable=True)
+    fcm_token = Column(String(255), nullable=True)  # 이전 스키마 호환용, 실제 발송에는 사용하지 않음
     default_target_months = Column(Integer, default=12)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -100,7 +101,29 @@ class Notification(Base):
     recommended_plan_id = Column(Integer, ForeignKey("plans.plan_id", ondelete="SET NULL"), nullable=True)
     scheduled_date = Column(Date, nullable=False)
     sent_at = Column(DateTime, nullable=True)
+    push_status = Column(String(20), default="NOT_SENT", nullable=False)
+    push_attempts = Column(Integer, default=0, nullable=False)
     status = Column(SQLEnum(NotificationStatus), default=NotificationStatus.PENDING)
 
     subscription = relationship("UserSubscription", back_populates="notifications")
     recommended_plan = relationship("Plan")
+
+
+class PushDevice(Base):
+    __tablename__ = "push_devices"
+    device_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    installation_id = Column(String(64), nullable=False, unique=True)
+    token = Column(String(2048), nullable=False)
+    token_hash = Column(String(64), unique=True, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, nullable=False)
+
+
+class PushDelivery(Base):
+    __tablename__ = "push_deliveries"
+    __table_args__ = (UniqueConstraint("notification_id", "device_id"),)
+    delivery_id = Column(Integer, primary_key=True, autoincrement=True)
+    notification_id = Column(Integer, ForeignKey("notifications.notification_id", ondelete="CASCADE"), nullable=False)
+    device_id = Column(Integer, ForeignKey("push_devices.device_id", ondelete="CASCADE"), nullable=False)
+    delivered_at = Column(DateTime, nullable=True)

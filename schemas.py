@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from models import SubscriptionStatus, NoticeType, NotificationStatus
 
 # --- Telecom Schemas ---
@@ -54,7 +54,6 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     user_id: int
     email: str
-    fcm_token: Optional[str] = None
     default_target_months: int
     created_at: datetime
 
@@ -68,6 +67,7 @@ class NotificationResponse(BaseModel):
     recommended_plan: Optional[PlanResponse] = None
     scheduled_date: date
     sent_at: Optional[datetime] = None
+    push_status: str = "NOT_SENT"
     status: NotificationStatus
 
 # --- Subscription Schemas ---
@@ -92,3 +92,16 @@ class SubscriptionResponse(BaseModel):
     created_at: datetime
     plan: Optional[PlanResponse] = None
     notifications: List[NotificationResponse] = []
+
+
+class PushDeviceInput(BaseModel):
+    installation_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    token: str = Field(min_length=20, max_length=2048)
+
+
+class PushDeviceDelete(BaseModel):
+    installation_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class UserPreferences(BaseModel):
+    default_target_months: int = Field(ge=6, le=48)

@@ -91,13 +91,23 @@ def job_send_lifecycle_notifications(db: Session = None) -> Dict[str, Any]:
                 subscription=sub,
                 user=user,
                 current_plan=current_plan,
-                recommended_plan=recommended_plan
+                recommended_plan=recommended_plan,
+                db=db
             )
 
-            # 3. 알림 발송 상태 업데이트
-            notif.status = NotificationStatus.SENT
-            notif.sent_at = now
-            stats["sent_count"] += 1
+            push_result = dispatch_res.get('push', {})
+            notif.push_attempts = (notif.push_attempts or 0) + 1
+            if push_result.get('failed', 0):
+                notif.push_status = 'FAILED'
+                # 성공한 기기는 발송 이력으로 제외하고 실패 기기만 다음 배치에서 재시도한다.
+                if notif.push_attempts >= 3:
+                    notif.status = NotificationStatus.FAILED
+                stats['failed_count'] += 1
+            else:
+                notif.push_status = 'SENT' if push_result.get('sent', 0) else 'NO_DEVICE'
+                notif.status = NotificationStatus.SENT
+                notif.sent_at = now
+                stats['sent_count'] += 1
             stats["results"].append(dispatch_res)
 
         db.commit()

@@ -7,3 +7,5 @@ beautifulsoup4
 requests
 lxml
 apscheduler
+
+firebase-admin>=6.5,<8

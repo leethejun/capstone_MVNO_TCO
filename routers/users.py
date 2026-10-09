@@ -1,43 +1,30 @@
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User
-from schemas import UserCreate, UserResponse
+from schemas import UserResponse, UserPreferences
+from services.auth import get_current_user
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
-@router.post("", response_model=UserResponse, summary="이메일로 기존 사용자 연결 또는 신규 등록")
-def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
-    email = user_in.email.strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(status_code=422, detail="올바른 이메일 주소를 입력해주세요.")
-    existing = db.query(User).filter(func.lower(User.email) == email).first()
-    if existing:
-        return existing
 
-    user = User(
-        email=email,
-        fcm_token=user_in.fcm_token,
-        default_target_months=user_in.default_target_months
-    )
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        existing = db.query(User).filter(func.lower(User.email) == email).first()
-        if existing:
-            return existing
-        raise
+@router.get("/me", response_model=UserResponse)
+def get_me(user: User = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/me", response_model=UserResponse)
+def update_preferences(preferences: UserPreferences, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if preferences.default_target_months not in (6, 12, 24, 36, 48):
+        raise HTTPException(status_code=422, detail="지원하지 않는 유지기간입니다.")
+    user.default_target_months = preferences.default_target_months
+    db.commit()
     db.refresh(user)
     return user
 
-@router.get("/{user_id}", response_model=UserResponse, summary="사용자 상세 조회")
-def get_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.user_id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+@router.get("/{user_id}", response_model=UserResponse)
+def get_user(user_id: int, user: User = Depends(get_current_user)):
+    if user_id != user.user_id:
+        raise HTTPException(status_code=403, detail="본인 계정만 조회할 수 있습니다.")
     return user

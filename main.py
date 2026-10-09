@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 import models
 from database import engine, get_db
-from routers import plans, users, subscriptions, crawler, notifications
+from routers import plans, users, subscriptions, crawler, notifications, push
 from services.scheduler.manager import start_scheduler, shutdown_scheduler
 
 # 서버 스타트업 시 ORM에 정의된 테이블 자동 생성 (없을 경우에만 생성)
@@ -46,6 +46,7 @@ app.include_router(users.router)
 app.include_router(subscriptions.router)
 app.include_router(crawler.router)
 app.include_router(notifications.router)
+app.include_router(push.router)
 
 @app.get("/")
 def read_root():

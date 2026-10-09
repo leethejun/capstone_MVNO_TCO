@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import get_db
 from models import Plan, Telecom
+from services.auth import require_admin
 from services.crawler.pipeline import run_comprehensive_crawler_pipeline
 from services.crawler.telecom_registry import sync_telecom_master
 
@@ -12,7 +13,8 @@ router = APIRouter(prefix="/api/crawler", tags=["Web Crawler & Pipeline"])
 def trigger_comprehensive_crawler(
     max_pages: int = Query(0, ge=0, le=100, description="수집할 알뜰폰허브 페이지 수 (0이면 전체 69페이지 전수 수집)"),
     include_direct: bool = Query(True, description="개별 통신사 공식몰 및 브랜드관 직접 크롤링 포함 여부"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin)
 ):
     """
     1. 대한민국 55+개 알뜰폰 통신사 마스터 DB 동기화
@@ -28,7 +30,7 @@ def trigger_comprehensive_crawler(
     return result
 
 @router.post("/sync-telecoms", summary="대한민국 40+개 알뜰폰 통신사 마스터 DB 동기화")
-def sync_telecoms_endpoint(db: Session = Depends(get_db)):
+def sync_telecoms_endpoint(db: Session = Depends(get_db), admin=Depends(require_admin)):
     """나무위키 기반 대한민국 40+개 알뜰폰 통신사(공식 홈페이지, 브랜드명) 즉시 동기화"""
     return sync_telecom_master(db=db)
 

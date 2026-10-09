@@ -3,6 +3,7 @@ import requests
 from typing import Dict, Any, Optional
 from datetime import datetime
 from services.lifecycle import target_end_date
+from services.push import send_to_devices
 from models import Notification, UserSubscription, Plan, User, NoticeType
 
 class NotificationDispatcher:
@@ -19,7 +20,8 @@ class NotificationDispatcher:
         subscription: UserSubscription,
         user: User,
         current_plan: Plan,
-        recommended_plan: Optional[Plan]
+        recommended_plan: Optional[Plan],
+        db=None
     ) -> Dict[str, Any]:
         """
         환승 알림 메시지를 생성하고 등록된 채널로 발송합니다.
@@ -73,9 +75,12 @@ class NotificationDispatcher:
             except Exception as e:
                 print(f"[NotificationDispatcher] Discord 전송 실패: {e}")
 
-        # 3. FCM 발송 (토큰 보유 시 모의/실제 발송)
-        if user.fcm_token:
-            dispatch_result["fcm_sent"] = True  # 토큰 연동 준비 상태
+        # 사용자별 여러 기기에 실제 FCM 발송. 토큰 보유만으로 성공 처리하지 않는다.
+        if db is not None:
+            push_result = send_to_devices(notification, user, title, body, db)
+            dispatch_result['push'] = push_result
+            dispatch_result['fcm_sent'] = push_result['sent'] > 0
+
 
         return dispatch_result
 

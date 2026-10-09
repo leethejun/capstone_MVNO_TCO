@@ -36,11 +36,15 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_ADMIN_UIDS: ${FIREBASE_ADMIN_UIDS:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/run/firebase/service-account.json}
       TZ: Asia/Seoul
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
       - .:/app
+      - ${FIREBASE_CREDENTIALS_DIR:-./secrets}:/run/firebase:ro
     networks:
       - alddle_network
 

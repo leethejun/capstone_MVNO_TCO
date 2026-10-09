@@ -1,0 +1,6 @@
+{
+  "id": "/", "name": "알뜰알뜰 TCO", "short_name": "알뜰알뜰",
+  "start_url": "/", "scope": "/", "display": "standalone",
+  "theme_color": "#4f46e5", "background_color": "#f8fafc",
+  "icons": [{"src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}

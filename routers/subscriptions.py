@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 from database import get_db
 from models import User, Plan, UserSubscription, Notification, SubscriptionStatus, NoticeType, NotificationStatus
 from schemas import SubscriptionCreate, SubscriptionResponse
+from services.auth import get_current_user
 from services.lifecycle import notification_schedule, target_end_date, recommendation_start_date, recommendation_available
 
 router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions & Notifications"])
@@ -19,11 +20,10 @@ def calculate_discount_end_date(start_date: date, months: int) -> date:
     return date(year, month, day)
 
 @router.post("", response_model=SubscriptionResponse, summary="사용자 요금제 개통 등록 및 만료 알림 스케줄 자동 생성")
-def create_subscription(sub_in: SubscriptionCreate, db: Session = Depends(get_db)):
-    # 1. 사용자 및 요금제 존재 여부 확인
-    user = db.query(User).filter(User.user_id == sub_in.user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+def create_subscription(sub_in: SubscriptionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if sub_in.user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="본인 계정에만 등록할 수 있습니다.")
+    user = current_user
 
     plan = db.query(Plan).options(joinedload(Plan.telecom)).filter(Plan.plan_id == sub_in.plan_id).first()
     if not plan:
@@ -63,7 +63,9 @@ def create_subscription(sub_in: SubscriptionCreate, db: Session = Depends(get_db
     return serialize_subscription(subscription)
 
 @router.get("/user/{user_id}", response_model=List[SubscriptionResponse], summary="특정 사용자의 개통 요금제 목록 및 알림 상태 조회")
-def get_user_subscriptions(user_id: int, db: Session = Depends(get_db)):
+def get_user_subscriptions(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="본인 요금제만 조회할 수 있습니다.")
     subs = db.query(UserSubscription)\
         .options(
             joinedload(UserSubscription.plan).joinedload(Plan.telecom),
@@ -75,13 +77,13 @@ def get_user_subscriptions(user_id: int, db: Session = Depends(get_db)):
     return [serialize_subscription(sub) for sub in subs]
 
 @router.get("/{subscription_id}", response_model=SubscriptionResponse, summary="개통 상세 정보 및 알림 조회")
-def get_subscription_detail(subscription_id: int, db: Session = Depends(get_db)):
+def get_subscription_detail(subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     sub = db.query(UserSubscription)\
         .options(
             joinedload(UserSubscription.plan).joinedload(Plan.telecom),
             joinedload(UserSubscription.notifications)
         )\
-        .filter(UserSubscription.subscription_id == subscription_id)\
+        .filter(UserSubscription.subscription_id == subscription_id, UserSubscription.user_id == current_user.user_id)\
         .first()
 
     if not sub:
@@ -102,7 +104,9 @@ def serialize_subscription(sub):
 
 
 @router.delete("/{subscription_id}", status_code=204, summary="내 요금제 및 관련 알림 삭제")
-def delete_subscription(subscription_id: int, user_id: int = Query(..., ge=1), db: Session = Depends(get_db)):
+def delete_subscription(subscription_id: int, user_id: int = Query(..., ge=1), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if user_id != current_user.user_id:
+        raise HTTPException(status_code=403, detail="본인 요금제만 삭제할 수 있습니다.")
     sub = db.query(UserSubscription).filter(
         UserSubscription.subscription_id == subscription_id,
         UserSubscription.user_id == user_id

@@ -1,3 +1,4 @@
+import { authHeaders } from './firebase';
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 
 export async function fetchPlansRank({
@@ -27,30 +28,25 @@ export async function fetchPlansRank({
   return res.json();
 }
 
-export async function createUser({ email, defaultTargetMonths = 12 }) {
-  const res = await fetch(`${API_BASE}/users`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      default_target_months: defaultTargetMonths,
-    }),
-  });
+export async function getMe() {
+  const res = await fetch(`${API_BASE}/users/me`, { headers: await authHeaders() });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "사용자 생성 실패");
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || '계정 연결 실패');
   }
   return res.json();
 }
-
-export async function getUser(userId) {
-  const res = await fetch(`${API_BASE}/users/${userId}`);
-  if (!res.ok) throw new Error("사용자 조회 실패");
+export async function updatePreferences(defaultTargetMonths) {
+  const res = await fetch(`${API_BASE}/users/me`, { method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...await authHeaders() },
+    body: JSON.stringify({ default_target_months: defaultTargetMonths }),
+  });
+  if (!res.ok) throw new Error('이용 주기 저장 실패');
   return res.json();
 }
 
 export async function getUserSubscriptions(userId) {
-  const res = await fetch(`${API_BASE}/subscriptions/user/${userId}`);
+  const res = await fetch(`${API_BASE}/subscriptions/user/${userId}`, { headers: await authHeaders() });
   if (!res.ok) throw new Error("구독 요금제 조회 실패");
   return res.json();
 }
@@ -58,7 +54,7 @@ export async function getUserSubscriptions(userId) {
 export async function createSubscription({ userId, planId, startDate, targetMonths }) {
   const res = await fetch(`${API_BASE}/subscriptions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...await authHeaders() },
     body: JSON.stringify({
       user_id: userId,
       plan_id: planId,
@@ -75,7 +71,7 @@ export async function createSubscription({ userId, planId, startDate, targetMont
 
 export async function triggerNotificationBatch() {
   const res = await fetch(`${API_BASE}/notifications/trigger-batch`, {
-    method: "POST",
+    method: "POST", headers: await authHeaders(),
   });
   if (!res.ok) throw new Error("알림 배치 실행 실패");
   return res.json();
@@ -89,7 +85,7 @@ export async function getCrawlerStatus() {
 
 export async function deleteSubscription({ subscriptionId, userId }) {
   const params = new URLSearchParams({ user_id: userId });
-  const res = await fetch(`${API_BASE}/subscriptions/${subscriptionId}?${params}`, { method: "DELETE" });
+  const res = await fetch(`${API_BASE}/subscriptions/${subscriptionId}?${params}`, { method: "DELETE", headers: await authHeaders() });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "요금제 삭제 실패");

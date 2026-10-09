@@ -25,3 +25,9 @@ mysql_data/
 # OS generated
 .DS_Store
 Thumbs.db
+
+# Firebase server credentials
+secrets/
+*service-account*.json
+*firebase-adminsdk*.json
+firebase.txt

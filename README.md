@@ -7,7 +7,7 @@
 - **TCO 랭킹**: 6·12·24·36·48개월 환승 주기 선택, 기본 12개월, 총비용과 월평균 비용 표시
 - **상세 필터**: 최소 QoS 속도, 음성통화 무제한, 문자 무제한, LTE/5G 선택
 - **요금제 카드**: 기본·일일 데이터, 소진 후 속도, 통화·문자 제공량, 월 할인가, 정상가, 할인 기간 표시
-- **계정 연결**: 이메일로 기존 계정을 연결하거나 신규 등록, 선택한 계정을 브라우저에 저장하여 복원
+- **Google 로그인**: Firebase ID 토큰 검증, 계정별 구독 접근 제한, 기존 이메일 계정의 구독 연결
 - **개통 등록·삭제**: 개통일과 이용 주기 저장, 내 요금제와 관련 알림 삭제, 유지기간 종료 한 달 전·일주일 전·하루 전 알림 예약
 - **추천 알림**: 유지기간 종료 한 달 전부터 이용 중인 요금제와 유사한 데이터·QoS 조건의 TCO 최저가 대체 상품 표시
 - **크롤링**: 알뜰폰허브와 사업자 공식몰 수집, 데이터·QoS·통화·문자 정형화 및 MySQL 적재
@@ -129,7 +129,9 @@ curl -X POST 'http://127.0.0.1:8000/api/crawler/run?max_pages=1&include_direct=f
 | GET | `/api/plans/rank` | 이용 기간·필터별 TCO 랭킹 |
 | GET | `/api/plans/telecoms` | 통신사 목록 |
 | GET | `/api/plans/{plan_id}` | 상품 상세 |
-| POST | `/api/users` | 이메일 기준 계정 연결 또는 신규 등록 |
+| GET/PATCH | `/api/users/me` | 인증 계정 조회·이용 주기 변경 |
+| POST/DELETE | `/api/push/devices` | 로그인 계정의 알림 기기 등록·해제 |
+| POST | `/api/push/test` | 본인 기기로 테스트 푸시 발송 |
 | GET | `/api/users/{user_id}` | 계정 조회 |
 | POST | `/api/subscriptions` | 개통 등록 및 알림 예약 |
 | GET | `/api/subscriptions/user/{user_id}` | 계정별 구독·알림 조회 |
@@ -175,14 +177,14 @@ npm run lint --prefix frontend
 docker exec alddle_backend python -B -m unittest discover -s tests -v
 ```
 
-회귀 테스트는 데이터 용량/QoS 단위 구분, 할인 종료·평생 할인 TCO, 비정상 상품 제외, 실제 0원 프로모션 보존, 기존 이메일 계정 연결, 유지기간 알림 일정, 월말 추천 표시 경계, 요금제 삭제 등을 검증합니다. 현재 22개 테스트가 포함되어 있습니다. 프론트엔드 린트에는 기존 React Hook 및 렌더링 관련 경고가 남아 있습니다.
+회귀 테스트는 데이터 용량/QoS 단위 구분, 할인 종료·평생 할인 TCO, 비정상 상품 제외, 실제 0원 프로모션 보존, 기존 이메일 계정 연결, 유지기간 알림 일정, 월말 추천 표시 경계, 요금제 삭제 등을 검증합니다. 현재 29개 테스트가 포함되어 있습니다. 프론트엔드 린트에는 기존 React Hook 및 렌더링 관련 경고가 남아 있습니다.
 
 ## 현재 구현 범위와 후속 과제
 
-- 이메일 연결은 비밀번호나 이메일 소유 확인을 하는 사용자 인증이 아닙니다. 운영 배포는 사이트 전체 Basic 인증으로 제한하며, 사용자별 인증·권한 분리는 후속 과제입니다.
-- 모바일 화면과 브라우저 알림 UI는 구현되어 있으나, 앱이 닫힌 상태의 Web Push, 서비스 워커 기반 오프라인 실행, 완전한 설치형 PWA는 아직 구현되지 않았습니다.
+- 사용자 API는 Google 로그인 토큰을 검증하고 본인 데이터만 허용합니다. 크롤러 실행·알림 배치·스케줄러 조회는 `FIREBASE_ADMIN_UIDS`에 등록된 관리자만 접근할 수 있습니다.
+- FCM Web Push와 서비스 워커의 백그라운드 알림을 구현했습니다. iOS는 지원 버전에서 홈 화면에 추가한 앱으로 사용해야 합니다. 오프라인 페이지 실행은 아직 지원하지 않습니다.
 - Discord Webhook 전송 코드가 있으며 환경 설정이 필요합니다. 현재 Compose 파일에는 `DISCORD_WEBHOOK_URL` 전달 설정이 없으므로 사용 시 별도로 추가해야 합니다.
-- FCM 토큰 필드와 발송 상태 처리 골격은 있지만 실제 FCM 전송은 구현되지 않았습니다.
+- FCM은 계정별 여러 기기를 지원하며 로그아웃 시 현재 기기 연결을 해제합니다. 실패는 최대 3회 배치에서 재시도하며, 성공한 기기에는 같은 알림을 재전송하지 않습니다. `SENT`는 FCM 접수 성공이며 실제 열람을 보장하지 않습니다.
 - 평생 할인 상품의 개통 등록 만료일·알림 정책은 추가 보강이 필요합니다.
 - 스케줄러가 API 프로세스 안에서 실행되므로 여러 worker/복제본을 운영할 때 중복 실행 방지가 필요합니다.
 - 사이트별 수집 정확도, 수집 실패 시 기존 데이터 보존, 조건부 할인 검증을 개선할 예정입니다.
@@ -202,3 +204,14 @@ models.py / schemas.py DB 모델과 API 스키마
 tests/                회귀 테스트
 deploy/               nginx·systemd 구성과 설치·업데이트 스크립트
 ```
+
+## Firebase 설정과 기존 서비스 업데이트
+
+1. Firebase 웹 앱 설정을 `frontend/.env.local`에 입력합니다 (`frontend/.env.example` 참고).
+2. Google 로그인 제공자를 활성화하고 승인된 도메인에 `alddletco.bulldog-walker.com`을 등록합니다.
+3. Cloud Messaging의 Web Push 공개 키를 `VITE_FIREBASE_VAPID_KEY`로 지정합니다.
+4. 서버용 서비스 계정 JSON은 `secrets/service-account.json`에 저장하고 `.env`의 `FIREBASE_PROJECT_ID`를 지정합니다. 비공개 키는 Git과 Docker 이미지에 포함하지 않습니다.
+5. `npm run build --prefix frontend` 후 `sudo bash deploy/update-firebase.sh`를 실행합니다. 기존 계정·구독을 보존하는 DB 변경, 백엔드 교체, 이 앱의 nginx 설정과 프론트엔드 반영을 수행합니다.
+6. 사이트에서 Google 로그인 → 알림 탭 → 푸시 알림 켜기 → 테스트 알림 보내기로 수신을 확인합니다.
+
+사이트 Basic 인증과 Google 로그인은 함께 유지됩니다. Firebase ID 토큰은 `X-Firebase-ID-Token` 헤더로 전달합니다. 푸시 서비스 워커와 공개 정적 파일은 Basic 인증 없이 갱신할 수 있지만 사용자 API는 두 인증을 유지합니다.

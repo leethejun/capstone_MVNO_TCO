@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { getUserSubscriptions, triggerNotificationBatch } from '../api';
-import { Bell, BellRing, Sparkles, Check, Send } from 'lucide-react';
+import { getUserSubscriptions } from '../api';
+import { enablePush, disablePush, refreshPush, watchForegroundPush, sendTestPush } from '../push';
+import { Bell, BellRing, Sparkles, Check } from 'lucide-react';
 
 export default function NotificationPage({ currentUser, onOpenUserModal }) {
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [triggering, setTriggering] = useState(false);
-  const [triggerResult, setTriggerResult] = useState('');
-  const [browserNotifPermission, setBrowserNotifPermission] = useState('default');
+  const [connecting, setConnecting] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushError, setPushError] = useState('');
 
   const loadData = async () => {
     if (!currentUser) {
+      setSubscriptions([]);
       setLoading(false);
       return;
     }
@@ -28,47 +30,39 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
 
   useEffect(() => {
     loadData();
-    if ('Notification' in window) {
-      setBrowserNotifPermission(Notification.permission);
-    }
   }, [currentUser]);
 
-  // 브라우저 알림 권한 요청
+  useEffect(() => {
+    let disposed = false;
+    let stop = () => {};
+    setPushEnabled(false);
+    if (currentUser) {
+      refreshPush().then((enabled) => { if (!disposed) setPushEnabled(enabled); }).catch(() => {});
+      watchForegroundPush(loadData).then((unsubscribe) => {
+        if (disposed) unsubscribe(); else stop = unsubscribe;
+      }).catch(() => {});
+    }
+    return () => { disposed = true; stop(); };
+  }, [currentUser]);
+
   const requestBrowserPermission = async () => {
-    if (!('Notification' in window)) {
-      alert('이 브라우저는 웹 알림을 지원하지 않습니다.');
-      return;
-    }
-    const perm = await Notification.requestPermission();
-    setBrowserNotifPermission(perm);
-    if (perm === 'granted') {
-      new Notification('알뜰알뜰 환승 알리미', {
-        body: '브라우저 환승 알림이 활성화되었습니다! D-Day에 알림을 전송합니다.',
-        icon: '/favicon.svg',
-      });
-    }
-  };
-
-  // 즉시 알림 배치 수동 실행 (시연용)
-  const handleTriggerBatch = async () => {
-    setTriggering(true);
-    setTriggerResult('');
+    setConnecting(true); setPushError('');
     try {
-      const res = await triggerNotificationBatch();
-      setTriggerResult(`배치 실행 성공: ${res.sent_count || 0}건 발송됨`);
-      await loadData(); // 갱신된 SENT 상태 및 추천 요금제 리로드
-
-      if (res.sent_count > 0 && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification('🚨 [D-Day 환승 알림 도착]', {
-          body: '프로모션 만료가 도래했습니다! 월 비용을 절약할 수 있는 TCO 최적 요금제를 확인하세요.',
-          icon: '/favicon.svg',
-        });
-      }
-    } catch (err) {
-      setTriggerResult(`실패: ${err.message}`);
-    } finally {
-      setTriggering(false);
-    }
+      await enablePush(); setPushEnabled(true);
+    } catch (err) { setPushError(err.message || '푸시 알림 연결 실패'); }
+    finally { setConnecting(false); }
+  };
+  const testPush = async () => {
+    setConnecting(true); setPushError('');
+    try { await sendTestPush(); }
+    catch (err) { setPushError(err.message || '테스트 알림 전송 실패'); }
+    finally { setConnecting(false); }
+  };
+  const turnOffPush = async () => {
+    setConnecting(true); setPushError('');
+    try { await disablePush(); setPushEnabled(false); }
+    catch (err) { setPushError(err.message || '알림 해제 실패'); }
+    finally { setConnecting(false); }
   };
 
   if (!currentUser) {
@@ -100,7 +94,7 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
 
   return (
     <div className="pb-24 pt-2 px-4 space-y-4 max-w-md mx-auto">
-      {/* 상단 알림 설정 & 데모 배치 트리거 카드 */}
+      {/* 상단 알림 설정 카드 */}
       <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-indigo-950 text-white rounded-3xl p-5 shadow-lg space-y-3.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -118,36 +112,27 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
 
         {/* 브라우저 푸시 권한 버튼 */}
         <div className="pt-1 flex gap-2">
-          {browserNotifPermission !== 'granted' ? (
+          {!pushEnabled ? (
             <button
               onClick={requestBrowserPermission}
+              disabled={connecting}
               className="flex-1 py-2 px-3 bg-white text-indigo-900 rounded-xl text-xs font-bold hover:bg-indigo-50 transition shadow-xs flex items-center justify-center gap-1.5"
             >
               <Bell className="w-3.5 h-3.5 text-indigo-600" />
-              <span>웹 브라우저 알림 켜기</span>
+              <span>{connecting ? '연결 중...' : '푸시 알림 켜기'}</span>
             </button>
           ) : (
             <div className="flex-1 py-1.5 px-3 bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5">
               <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span>브라우저 알림 활성화됨</span>
+              <span>FCM 푸시 알림 연결됨</span>
             </div>
           )}
 
-          {/* 시연용 즉시 발송 버튼 */}
-          <button
-            onClick={handleTriggerBatch}
-            disabled={triggering}
-            className="py-2 px-3 bg-indigo-700 hover:bg-indigo-600 border border-indigo-500/40 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 disabled:opacity-50"
-            title="오늘 날짜 기준 배치 즉시 수동 실행 (시연용)"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>{triggering ? '발송 중...' : '배치 시연'}</span>
-          </button>
+          {pushEnabled && <button disabled={connecting} onClick={turnOffPush} className="text-xs text-indigo-200 px-2">이 기기 알림 끄기</button>}
         </div>
 
-        {triggerResult && (
-          <p className="text-[11px] text-amber-300 bg-black/20 p-2 rounded-xl text-center">{triggerResult}</p>
-        )}
+        {pushEnabled && <button disabled={connecting} onClick={testPush} className="text-xs text-indigo-200 underline">테스트 알림 보내기</button>}
+        {pushError && <p role="alert" className="text-xs text-amber-300">{pushError}</p>}
       </div>
 
       {/* 알림 피드 리스트 */}
@@ -199,7 +184,7 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
                         : 'bg-slate-100 text-slate-500'
                     }`}
                   >
-                    {notif.status === 'SENT' ? '발송 완료' : '발송 대기'}
+                    {notif.push_status === 'SENT' ? '푸시 발송 완료' : notif.push_status === 'NO_DEVICE' ? '앱 내 알림' : notif.status === 'FAILED' ? '발송 실패' : '발송 대기'}
                   </span>
                 </div>
 

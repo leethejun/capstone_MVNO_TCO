@@ -54,7 +54,7 @@ class SubscriptionLifecycleTests(unittest.TestCase):
 
     def test_registration_reserves_maintenance_not_discount_dates(self):
         result = create_subscription(SubscriptionCreate(user_id=self.user.user_id, plan_id=self.plan.plan_id,
-                                     start_date=date(2026, 3, 31), target_months=12), self.db)
+                                     start_date=date(2026, 3, 31), target_months=12), self.db, self.user)
         self.assertEqual(result.discount_end_date, date(2026, 10, 31))
         self.assertEqual(result.target_end_date, date(2027, 3, 31))
         self.assertEqual({n.scheduled_date for n in result.notifications},
@@ -65,7 +65,7 @@ class SubscriptionLifecycleTests(unittest.TestCase):
         self.db.add(Notification(subscription_id=sub.subscription_id, notice_type=NoticeType.D_7,
                                  scheduled_date=date(2027, 3, 24)))
         self.db.commit()
-        delete_subscription(sub.subscription_id, self.user.user_id, self.db)
+        delete_subscription(sub.subscription_id, self.user.user_id, self.db, self.user)
         self.assertEqual(self.db.query(UserSubscription).count(), 0)
         self.assertEqual(self.db.query(Notification).count(), 0)
         self.assertEqual(self.db.query(Plan).count(), 1)
@@ -74,8 +74,8 @@ class SubscriptionLifecycleTests(unittest.TestCase):
     def test_delete_wrong_user_rejected(self):
         sub = self.subscription()
         with self.assertRaises(HTTPException) as error:
-            delete_subscription(sub.subscription_id, self.user.user_id + 1, self.db)
-        self.assertEqual(error.exception.status_code, 404)
+            delete_subscription(sub.subscription_id, self.user.user_id + 1, self.db, self.user)
+        self.assertEqual(error.exception.status_code, 403)
         self.assertEqual(self.db.query(UserSubscription).count(), 1)
 
     def test_response_hides_existing_recommendation_before_window(self):
