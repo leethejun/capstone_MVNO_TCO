@@ -179,5 +179,22 @@
   "본인 요금제만 조회할 수 있습니다.": "You can only view your own plans.",
   "개통 정보를 찾을 수 없습니다.": "Subscription not found.",
   "본인 요금제만 삭제할 수 있습니다.": "You can only delete your own plans.",
-  "등록된 요금제를 찾을 수 없습니다.": "Registered plan not found."
+  "등록된 요금제를 찾을 수 없습니다.": "Registered plan not found.",
+  "관리자 페이지": "Admin",
+  "자동 갱신: 매월 1일 새벽 2시 (한국 시간)": "Automatic refresh: 2 AM on the first of each month (Korea time)",
+  "다음 자동 갱신": "Next automatic refresh",
+  "상태": "Status",
+  "수집 시작": "Started",
+  "최근 수집": "Last crawl",
+  "대기 중": "Idle",
+  "수집 중": "Collecting",
+  "갱신 완료": "Refresh completed",
+  "갱신 실패": "Refresh failed",
+  "전체 요금제 수동 갱신": "Refresh all plans",
+  "전체 수집에는 시간이 걸립니다. 페이지를 닫아도 계속 진행됩니다. 검증이 완료되면 요금제 목록이 교체됩니다.": "Collecting all plans takes time and continues after you close this page. The plan list is replaced after validation.",
+  "최근 수집 결과": "Last crawl results",
+  "활성 요금제": "Active plans",
+  "공식몰": "Official site",
+  "허브": "Hub",
+  "이미 수집이 진행 중입니다.": "A crawl is already running."
 }

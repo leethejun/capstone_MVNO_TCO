@@ -14,7 +14,7 @@ models.Base.metadata.create_all(bind=engine)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 서버 기동 시 정기 스케줄러(새벽 2시 크롤링 / 자정 환승 알림) 자동 가동
+    # 서버 기동 시 정기 스케줄러(매월 1일 새벽 2시 크롤링 / 자정 환승 알림) 자동 가동
     start_scheduler()
     yield
     # 서버 종료 시 스케줄러 안전 종료

@@ -92,3 +92,14 @@ export async function deleteSubscription({ subscriptionId, userId }) {
     throw new Error(t(err.detail) || t("요금제 삭제 실패"));
   }
 }
+
+async function crawlerAdminRequest(path, method = 'GET') {
+  const res = await fetch(`${API_BASE}/crawler/${path}`, { method, headers: await authHeaders() });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(t(error.detail || '크롤러 상태 조회 실패'));
+  }
+  return res.json();
+}
+export const getCrawlerRunState = () => crawlerAdminRequest('run-status');
+export const startCrawlerRefresh = () => crawlerAdminRequest('run', 'POST');

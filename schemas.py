@@ -51,6 +51,7 @@ class UserCreate(BaseModel):
     default_target_months: int = 12
 
 class UserResponse(BaseModel):
+    is_admin: bool = False
     model_config = ConfigDict(from_attributes=True)
     user_id: int
     email: str

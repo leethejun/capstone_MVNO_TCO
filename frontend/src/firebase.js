@@ -13,7 +13,8 @@ export async function googleLogin() {
   if (!auth) throw new Error(t("Google 로그인 설정을 준비 중입니다. 잠시 후 다시 시도해주세요."));
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  await signInWithPopup(auth, provider);
+  const result = await signInWithPopup(auth, provider);
+  return result.user;
 }
 export async function firebaseLogout() {
   if (auth) await signOut(auth);

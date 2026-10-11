@@ -16,6 +16,7 @@ async function messagingInstance() {
   return getMessaging(getApp());
 }
 async function registerToken(requestPermission) {
+  const registeringUser = auth?.currentUser;
   if (!auth?.currentUser) throw new Error(t("Google 로그인 후 알림을 켜주세요."));
   if (!('Notification' in window)) throw new Error(t("이 브라우저는 알림을 지원하지 않습니다."));
   const permission = requestPermission ? await Notification.requestPermission() : Notification.permission;
@@ -28,6 +29,7 @@ async function registerToken(requestPermission) {
   await navigator.serviceWorker.ready;
   const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
   if (!token) throw new Error(t("기기 등록에 실패했습니다. 다시 시도해주세요."));
+  if (auth.currentUser !== registeringUser || (!requestPermission && localStorage.getItem(disabledKey))) return false;
   const response = await fetch(`${base}/push/devices`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', ...await authHeaders() },
     body: JSON.stringify({ installation_id: installationId(), token, language: getLocale() }),
@@ -50,16 +52,20 @@ export async function refreshPush() {
   return false;
 }
 export async function disablePush() {
-  const id = localStorage.getItem(deviceKey);
-  if (id && auth?.currentUser) {
-    const response = await fetch(`${base}/push/devices`, { method: 'DELETE',
-      headers: { 'Content-Type': 'application/json', ...await authHeaders() },
-      body: JSON.stringify({ installation_id: id }),
-    });
-    if (!response.ok) throw new Error(t("알림 기기 연결을 해제하지 못했습니다. 다시 시도해주세요."));
-  }
   localStorage.setItem(disabledKey, '1');
-  if (auth && await isSupported()) await deleteToken(getMessaging(getApp()));
+  const id = localStorage.getItem(deviceKey);
+  try {
+    if (id && auth?.currentUser) {
+      const response = await fetch(`${base}/push/devices`, { method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...await authHeaders() },
+        body: JSON.stringify({ installation_id: id }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!response.ok) throw new Error(t("알림 기기 연결을 해제하지 못했습니다. 다시 시도해주세요."));
+    }
+  } finally {
+    if (auth && await isSupported()) await deleteToken(getMessaging(getApp()));
+  }
 }
 
 export async function watchForegroundPush(callback) {

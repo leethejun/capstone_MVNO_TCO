@@ -4,28 +4,15 @@ from sqlalchemy.orm import Session, joinedload
 
 from database import SessionLocal
 from models import Notification, UserSubscription, Plan, User, NotificationStatus, SubscriptionStatus
-from services.crawler.pipeline import run_comprehensive_crawler_pipeline
 from services.recommender import recommend_best_plan
 from services.notifier import NotificationDispatcher
 from services.lifecycle import recommendation_available
 
 def job_crawl_mvno_plans() -> Dict[str, Any]:
-    """
-    [매일 새벽 02:00 정기 작업]
-    대한민국 알뜰폰 통신사 및 요금제 전수 자동 크롤링 및 DB 최신화
-    """
-    print(f"\n[Scheduler] 새벽 02:00 정기 크롤링 작업 시작: {datetime.now()}")
-    db = SessionLocal()
-    try:
-        # 허브 전체 페이지와 허브·마스터 사업자 공식몰 수집 후 추천 목록 교체
-        stats = run_comprehensive_crawler_pipeline(max_pages=0, include_direct=True, db=db)
-        print(f"[Scheduler] 정기 크롤링 완료: {stats}")
-        return stats
-    except Exception as e:
-        print(f"[Scheduler] 정기 크롤링 중 오류: {e}")
-        return {"success": False, "error": str(e)}
-    finally:
-        db.close()
+    """매월 1일 02:00 한국 시간에 전체 수집을 예약한다."""
+    from services.crawler.runner import start_refresh
+    accepted, state = start_refresh(source='scheduled')
+    return {'accepted': accepted, **state}
 
 def job_send_lifecycle_notifications(db: Session = None) -> Dict[str, Any]:
     """

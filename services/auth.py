@@ -49,8 +49,12 @@ def get_current_user(x_firebase_id_token: str = Header(None), db: Session = Depe
     return resolve_google_user(claims, db)
 
 
-def require_admin(user: User = Depends(get_current_user)):
+def is_admin(user):
     admin_uids = {value.strip() for value in os.getenv('FIREBASE_ADMIN_UIDS', '').split(',') if value.strip()}
-    if user.firebase_uid not in admin_uids:
+    return bool(user.firebase_uid and user.firebase_uid in admin_uids)
+
+
+def require_admin(user: User = Depends(get_current_user)):
+    if not is_admin(user):
         raise HTTPException(status_code=403, detail='관리자 권한이 필요합니다.')
     return user

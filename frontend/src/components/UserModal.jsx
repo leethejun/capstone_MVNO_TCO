@@ -1,11 +1,12 @@
 import { useI18n } from '../i18n/hooks';
 import React, { useState } from 'react';
 import { X, UserCheck } from 'lucide-react';
-import { googleLogin, firebaseLogout, firebaseConfigured } from '../firebase';
+import { firebaseLogout, firebaseConfigured } from '../firebase';
 import { updatePreferences } from '../api';
+import { logoutAccount } from '../account-session';
 import { disablePush } from '../push';
 
-export default function UserModal({ isOpen, onClose, currentUser, onSelectUser }) {
+export default function UserModal({ isOpen, onClose, currentUser, onSelectUser, onLogin, onLoggedOut, onOpenAdmin }) {
   const { t } = useI18n();
   const [targetMonths, setTargetMonths] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -30,12 +31,13 @@ export default function UserModal({ isOpen, onClose, currentUser, onSelectUser }
           <button disabled={loading} onClick={() => run(async () => {
             onSelectUser(await updatePreferences(targetMonths ?? currentUser.default_target_months)); onClose();
           })} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold disabled:opacity-50">{t("이용 주기 저장")}</button>
+          {currentUser.is_admin && <button disabled={loading} onClick={onOpenAdmin} className="w-full py-2.5 border border-indigo-200 text-indigo-600 rounded-xl text-xs font-semibold">{t("관리자 페이지")}</button>}
           <button disabled={loading} onClick={() => run(async () => {
-            await disablePush(); await firebaseLogout(); onSelectUser(null); setTargetMonths(null); onClose();
+            await logoutAccount({ cleanup: disablePush, signOut: firebaseLogout, clear: onLoggedOut }); setTargetMonths(null); onClose();
           })} className="w-full py-2.5 bg-slate-100 rounded-xl text-xs disabled:opacity-50">{t("로그아웃")}</button>
         </> : <>
           <p className="text-xs text-slate-500">{t("Google 계정으로 로그인하여 내 요금제와 환승 알림을 관리하세요.")}</p>
-          <button disabled={loading || !firebaseConfigured} onClick={() => run(async () => { await googleLogin(); onClose(); })} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold disabled:opacity-50">
+          <button disabled={loading || !firebaseConfigured} onClick={() => run(async () => { await onLogin(); onClose(); })} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold disabled:opacity-50">
             {loading ? t("로그인 중...") : t("Google로 로그인")}
           </button>
           {!firebaseConfigured && <p className="text-xs text-slate-500">{t("Google 로그인 설정을 준비 중입니다.")}</p>}

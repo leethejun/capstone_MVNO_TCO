@@ -4,11 +4,13 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import UserModal from './components/UserModal';
 import SubscribeModal from './components/SubscribeModal';
+import AdminPage from './pages/AdminPage';
 import RankPage from './pages/RankPage';
 import SubscriptionPage from './pages/SubscriptionPage';
 import NotificationPage from './pages/NotificationPage';
 import { getMe } from './api';
-import { observeAuth } from './firebase';
+import { createAccountSession } from './account-session';
+import { observeAuth, googleLogin } from './firebase';
 import { refreshPush } from './push';
 
 export default function App() {
@@ -20,25 +22,22 @@ export default function App() {
   const [selectedPlanForSubscribe, setSelectedPlanForSubscribe] = useState(null);
 
   const [authError, setAuthError] = useState('');
+  const [accountSession] = useState(() => createAccountSession({
+    getAccount: getMe, publish: setCurrentUser, reportError: setAuthError,
+  }));
   useEffect(() => {
-    let generation = 0;
-    const stop = observeAuth(async (firebaseUser) => {
-      const current = ++generation;
-      setCurrentUser(null);
-      setAuthError('');
+    const stop = observeAuth((firebaseUser) => {
       localStorage.removeItem('mvno_user_id');
-      if (!firebaseUser) return;
-      try {
-        const user = await getMe();
-        if (current !== generation) return;
-        setCurrentUser(user);
-        await refreshPush().catch(() => {});
-      } catch (err) {
-        if (current === generation) setAuthError(err.message);
-      }
+      accountSession.load(firebaseUser).then(user => {
+        if (user) refreshPush().catch(() => {});
+      }).catch(() => {});
     });
-    return () => { generation++; stop(); };
-  }, []);
+    return () => { stop(); accountSession.clear(); };
+  }, [accountSession]);
+  const handleLogin = async () => {
+    const firebaseUser = await googleLogin();
+    await accountSession.load(firebaseUser);
+  };
   const handleSelectUser = (user) => setCurrentUser(user);
 
   const handleSubscribeSuccess = () => {
@@ -56,6 +55,7 @@ export default function App() {
         {authError && <p role="alert" className="px-4 py-2 text-xs text-rose-600">{t(authError)}</p>}
         {/* 메인 화면 영역 */}
         <main className="flex-1 overflow-y-auto">
+          {activeTab === "admin" && <AdminPage currentUser={currentUser} />}
           {activeTab === 'rank' && (
             <RankPage
               onSelectPlanForSubscribe={(plan) => setSelectedPlanForSubscribe(plan)}
@@ -87,6 +87,9 @@ export default function App() {
           onClose={() => setIsUserModalOpen(false)}
           currentUser={currentUser}
           onSelectUser={handleSelectUser}
+          onLogin={handleLogin}
+          onLoggedOut={() => { accountSession.clear(); setActiveTab("rank"); }}
+          onOpenAdmin={() => { setIsUserModalOpen(false); setActiveTab("admin"); }}
         />
 
         {/* 요금제 개통 등록 모달 */}

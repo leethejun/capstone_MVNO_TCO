@@ -5,7 +5,7 @@ export function LanguageProvider({ children }) {
   const [locale, setLocale] = useState(getLocale);
   useEffect(() => {
     document.documentElement.lang = locale;
-    document.title = locale === 'en' ? 'Alddle — MVNO TCO' : '알뜰알뜰 — MVNO TCO';
+    document.title = locale === 'en' ? 'Alddle' : '알뜰알뜰';
   }, [locale]);
   const changeLocale = (next) => {
     const value = next === 'en' ? 'en' : 'ko';

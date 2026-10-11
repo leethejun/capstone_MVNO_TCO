@@ -3,14 +3,14 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User
 from schemas import UserResponse, UserPreferences
-from services.auth import get_current_user
+from services.auth import get_current_user, is_admin
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
 
 @router.get("/me", response_model=UserResponse)
 def get_me(user: User = Depends(get_current_user)):
-    return user
+    return UserResponse.model_validate(user).model_copy(update={"is_admin": is_admin(user)})
 
 
 @router.patch("/me", response_model=UserResponse)
@@ -20,11 +20,11 @@ def update_preferences(preferences: UserPreferences, user: User = Depends(get_cu
     user.default_target_months = preferences.default_target_months
     db.commit()
     db.refresh(user)
-    return user
+    return UserResponse.model_validate(user).model_copy(update={"is_admin": is_admin(user)})
 
 
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(user_id: int, user: User = Depends(get_current_user)):
     if user_id != user.user_id:
         raise HTTPException(status_code=403, detail="본인 계정만 조회할 수 있습니다.")
-    return user
+    return UserResponse.model_validate(user).model_copy(update={"is_admin": is_admin(user)})

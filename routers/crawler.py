@@ -1,33 +1,31 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import get_db
 from models import Plan, Telecom
 from services.auth import require_admin
-from services.crawler.pipeline import run_comprehensive_crawler_pipeline
+from services.crawler.runner import start_refresh, get_run_state
 from services.crawler.telecom_registry import sync_telecom_master
 
 router = APIRouter(prefix="/api/crawler", tags=["Web Crawler & Pipeline"])
 
-@router.post("/run", summary="알뜰폰 전수 웹 크롤러 및 정형화 파이프라인 실행")
+@router.post("/run", status_code=202, summary="알뜰폰 전수 웹 크롤러 및 정형화 파이프라인 실행")
 def trigger_comprehensive_crawler(
     max_pages: int = Query(0, ge=0, le=100, description="수집할 알뜰폰허브 페이지 수 (0이면 전체 수집, 일부 페이지 실행은 DB 교체하지 않음)"),
     include_direct: bool = Query(True, description="개별 통신사 공식몰 및 브랜드관 직접 크롤링 포함 여부"),
     db: Session = Depends(get_db),
     admin=Depends(require_admin)
 ):
-    """
-    1. 대한민국 55+개 알뜰폰 통신사 마스터 DB 동기화
-    2. 알뜰폰허브(mvnohub.kr) 페이징 전수 요금제 수집 (69페이지 전체)
-    3. 허브와 마스터 목록을 합친 모든 알뜰폰 사업자 공식 홈페이지 및 브랜드관 직접 크롤링
-    4. 검증 후 추천 목록 교체 및 구독 이력 보존
-    """
-    result = run_comprehensive_crawler_pipeline(
-        max_pages=max_pages,
-        include_direct=include_direct,
-        db=db
-    )
-    return result
+    accepted, state = start_refresh(max_pages=max_pages, include_direct=include_direct)
+    if not accepted:
+        raise HTTPException(status_code=409, detail="이미 수집이 진행 중입니다.")
+    return state
+
+
+@router.get('/run-status')
+def crawler_run_status(admin=Depends(require_admin)):
+    from services.scheduler.manager import get_scheduler_jobs
+    return {**get_run_state(), 'jobs': get_scheduler_jobs(), 'last_report': get_crawler_coverage(admin)}
 
 @router.post("/sync-telecoms", summary="대한민국 40+개 알뜰폰 통신사 마스터 DB 동기화")
 def sync_telecoms_endpoint(db: Session = Depends(get_db), admin=Depends(require_admin)):
