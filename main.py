@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 import models
 from database import engine, get_db
-from routers import plans, users, subscriptions, crawler, notifications
+from routers import plans, users, subscriptions, crawler, notifications, push
 from services.scheduler.manager import start_scheduler, shutdown_scheduler
 
 # 서버 스타트업 시 ORM에 정의된 테이블 자동 생성 (없을 경우에만 생성)
@@ -14,11 +14,15 @@ models.Base.metadata.create_all(bind=engine)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 서버 기동 시 정기 스케줄러(새벽 2시 크롤링 / 자정 환승 알림) 자동 가동
+    # 서버 기동 시 정기 스케줄러(매월 1일 새벽 2시 크롤링 / 자정 환승 알림) 자동 가동
     start_scheduler()
     yield
     # 서버 종료 시 스케줄러 안전 종료
-    shutdown_scheduler()
+    try:
+        print("\n[main.py] Lifespan shutdown: 스케줄러 종료...")
+        shutdown_scheduler()
+    except Exception as e:
+        print(f"[main.py] Lifespan shutdown 오류 (비중요): {e}")
 
 app = FastAPI(
     title="알뜰폰 TCO 최적화 API",
@@ -42,6 +46,7 @@ app.include_router(users.router)
 app.include_router(subscriptions.router)
 app.include_router(crawler.router)
 app.include_router(notifications.router)
+app.include_router(push.router)
 
 @app.get("/")
 def read_root():

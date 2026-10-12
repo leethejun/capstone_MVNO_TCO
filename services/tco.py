@@ -1,3 +1,4 @@
+import re
 from typing import Dict, Any, List
 from models import Plan
 from schemas import PlanRankItem, TelecomResponse
@@ -16,7 +17,7 @@ def calculate_tco(
     if target_months <= 0:
         target_months = 1
 
-    if target_months <= discount_months:
+    if discount_months == -1 or target_months <= discount_months:
         discount_period = target_months
         normal_period = 0
         tco = discount_price * target_months
@@ -57,6 +58,23 @@ def rank_plans_by_tco(plans: List[Plan], target_months: int) -> List[PlanRankIte
     ranked_items: List[PlanRankItem] = []
 
     for plan in plans:
+        # 과거 크롤러가 누락된 가격을 0원으로 저장한 레코드는 추천하지 않는다.
+        # 정상가가 확인된 0원 프로모션은 유효하다.
+        if (plan.discount_price is None or plan.normal_price is None
+                or plan.discount_price < 0 or plan.normal_price <= 0
+                or plan.normal_price < plan.discount_price
+                or plan.discount_months is None or plan.discount_months < -1):
+            continue
+        raw = plan.raw_text or ""
+        # 종량제·충전형 요금은 사용량 없이 월 고정 TCO를 계산할 수 없다.
+        if re.search(r"종량제|쓴\s*만큼\s*과금|원\s*/\s*(?:MB|GB|분|건)", raw, re.IGNORECASE):
+            continue
+        # 과거 범용 공식몰 수집은 혜택 문구를 요금제로 저장했다.
+        # 명시적 데이터 필드/전용 크롤러/새 가격 검증 근거가 없으면 재수집 전까지 제외한다.
+        if (raw.startswith("[공식몰]") and "[월요금 요소 검증]" not in raw
+                and not re.search(r"\|\s*데이터\s+\d", raw)
+                and "[출처: 이야기모바일 공식홈페이지]" not in raw):
+            continue
         tco_info = calculate_tco(
             target_months=target_months,
             discount_months=plan.discount_months,

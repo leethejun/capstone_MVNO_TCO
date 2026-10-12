@@ -1,6 +1,6 @@
 from datetime import date, datetime
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict, EmailStr
+from typing import Literal, Optional, List
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from models import SubscriptionStatus, NoticeType, NotificationStatus
 
 # --- Telecom Schemas ---
@@ -48,13 +48,13 @@ class PlanRankItem(PlanResponse):
 class UserCreate(BaseModel):
     email: str
     fcm_token: Optional[str] = None
-    default_target_months: int = 7
+    default_target_months: int = 12
 
 class UserResponse(BaseModel):
+    is_admin: bool = False
     model_config = ConfigDict(from_attributes=True)
     user_id: int
     email: str
-    fcm_token: Optional[str] = None
     default_target_months: int
     created_at: datetime
 
@@ -65,8 +65,10 @@ class NotificationResponse(BaseModel):
     subscription_id: int
     notice_type: NoticeType
     recommended_plan_id: Optional[int] = None
+    recommended_plan: Optional[PlanResponse] = None
     scheduled_date: date
     sent_at: Optional[datetime] = None
+    push_status: str = "NOT_SENT"
     status: NotificationStatus
 
 # --- Subscription Schemas ---
@@ -84,7 +86,24 @@ class SubscriptionResponse(BaseModel):
     start_date: date
     target_months: int
     discount_end_date: date
+    target_end_date: Optional[date] = None
+    recommendation_start_date: Optional[date] = None
+    recommendation_available: bool = False
     status: SubscriptionStatus
     created_at: datetime
     plan: Optional[PlanResponse] = None
     notifications: List[NotificationResponse] = []
+
+
+class PushDeviceInput(BaseModel):
+    language: Literal["ko", "en"] = "ko"
+    installation_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    token: str = Field(min_length=20, max_length=2048)
+
+
+class PushDeviceDelete(BaseModel):
+    installation_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class UserPreferences(BaseModel):
+    default_target_months: int = Field(ge=6, le=48)

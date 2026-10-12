@@ -1,31 +1,30 @@
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User
-from schemas import UserCreate, UserResponse
+from schemas import UserResponse, UserPreferences
+from services.auth import get_current_user, is_admin
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
-@router.post("", response_model=UserResponse, summary="신규 사용자 등록")
-def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == user_in.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="이미 등록된 이메일입니다.")
 
-    user = User(
-        email=user_in.email,
-        fcm_token=user_in.fcm_token,
-        default_target_months=user_in.default_target_months
-    )
-    db.add(user)
+@router.get("/me", response_model=UserResponse)
+def get_me(user: User = Depends(get_current_user)):
+    return UserResponse.model_validate(user).model_copy(update={"is_admin": is_admin(user)})
+
+
+@router.patch("/me", response_model=UserResponse)
+def update_preferences(preferences: UserPreferences, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if preferences.default_target_months not in (6, 12, 24, 36, 48):
+        raise HTTPException(status_code=422, detail="지원하지 않는 유지기간입니다.")
+    user.default_target_months = preferences.default_target_months
     db.commit()
     db.refresh(user)
-    return user
+    return UserResponse.model_validate(user).model_copy(update={"is_admin": is_admin(user)})
 
-@router.get("/{user_id}", response_model=UserResponse, summary="사용자 상세 조회")
-def get_user(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.user_id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
-    return user
+
+@router.get("/{user_id}", response_model=UserResponse)
+def get_user(user_id: int, user: User = Depends(get_current_user)):
+    if user_id != user.user_id:
+        raise HTTPException(status_code=403, detail="본인 계정만 조회할 수 있습니다.")
+    return UserResponse.model_validate(user).model_copy(update={"is_admin": is_admin(user)})

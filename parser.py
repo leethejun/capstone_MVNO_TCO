@@ -27,9 +27,17 @@ class PlanTextParser:
         # 1. 전각 문자(＋, ㎆, ㎇ 등)를 반각 표준 문자로 정규화 (NFKC)
         normalized = unicodedata.normalize("NFKC", raw_text)
 
-        qos = PlanTextParser._extract_qos_speed(normalized)
-        daily = PlanTextParser._extract_daily_data(normalized)
-        base = PlanTextParser._extract_base_data(normalized)
+        # 요금제명·쿠폰 문구보다 크롤러가 붙인 실제 데이터 스펙을 우선한다.
+        data_sections = [part.strip() for part in normalized.split("|")
+                         if re.match(r"^\s*데이터\s+\d", part)]
+        data_text = " | ".join(data_sections) if data_sections else normalized
+        qos = PlanTextParser._extract_qos_speed(data_text)
+        if not qos and data_sections:
+            after_sections = [part for part in normalized.split("|")
+                              if re.match(r"^\s*(?:소진후|QoS)\b", part, re.IGNORECASE)]
+            qos = PlanTextParser._extract_qos_speed(" | ".join(after_sections))
+        daily = PlanTextParser._extract_daily_data(data_text)
+        base = PlanTextParser._extract_base_data(data_text)
 
         # 실질 무제한 여부: QoS 속도제어가 0.4Mbps 이상이거나 일일 데이터가 제공되는 경우
         is_unlimited = (qos > 0.0) or (daily > 0.0)
@@ -53,22 +61,27 @@ class PlanTextParser:
         QoS 속도제어 수치 추출 (예: '3Mbps', '1Mbps', '5Mbps', '400Kbps', '+3Mbps', '소진시1Mbps')
         """
         # 1. Mbps 추출 (예: 3Mbps, 1.5Mbps, 3 Mbps)
-        mbps_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:Mbps|mbps|MBPS|메가)', text)
+        mbps_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:Mbps|메가비트)', text, re.IGNORECASE)
         if mbps_match:
             return round(float(mbps_match.group(1)), 1)
 
         # 2. Kbps 추출 -> Mbps 환산 (예: 400Kbps -> 0.4Mbps, 200Kbps -> 0.2Mbps)
-        kbps_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:Kbps|kbps|KBPS|킬로)', text)
+        kbps_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:Kbps|킬로비트)', text, re.IGNORECASE)
         if kbps_match:
             return round(float(kbps_match.group(1)) / 1000.0, 1)
 
         # 3. '+숫자M' 형태 (예: 11GB+3M)
-        plus_m_match = re.search(r'\+\s*(\d+(?:\.\d+)?)\s*M(?:bps)?', text, re.IGNORECASE)
+        plus_m_match = re.search(r'\+\s*(\d+(?:\.\d+)?)\s*M(?:bps)?(?![A-Za-z가-힣])', text, re.IGNORECASE)
         if plus_m_match:
             return round(float(plus_m_match.group(1)), 1)
 
         # 4. '속도제어', 'QoS' 키워드 뒤 숫자 매칭
-        qos_keyword_match = re.search(r'(?:qos|속도제어|소진시|안심)\s*(\d+(?:\.\d+)?)', text, re.IGNORECASE)
+        # 단위 없는 값은 명시적인 속도 필드에서만 허용한다.
+        # '안심300MB', 'QoS 300MB' 같은 용량/상품명은 속도가 아니다.
+        qos_keyword_match = re.search(
+            r'(?:qos|속도제어|소진시)\s*(\d+(?:\.\d+)?)(?=\s*(?:[|,;/)]|$))',
+            text, re.IGNORECASE
+        )
         if qos_keyword_match:
             val = float(qos_keyword_match.group(1))
             if val >= 100:  # 400 등은 Kbps 단위
