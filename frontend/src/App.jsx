@@ -4,6 +4,7 @@ import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import UserModal from './components/UserModal';
 import SubscribeModal from './components/SubscribeModal';
+import ComparePlanModal from './components/ComparePlanModal';
 import AdminPage from './pages/AdminPage';
 import RankPage from './pages/RankPage';
 import SubscriptionPage from './pages/SubscriptionPage';
@@ -20,6 +21,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedPlanForSubscribe, setSelectedPlanForSubscribe] = useState(null);
+  const [selectedPlanForCompare, setSelectedPlanForCompare] = useState(null);
 
   const [authError, setAuthError] = useState('');
   const [accountSession] = useState(() => createAccountSession({
@@ -58,7 +60,7 @@ export default function App() {
           {activeTab === "admin" && <AdminPage currentUser={currentUser} />}
           {activeTab === 'rank' && (
             <RankPage
-              onSelectPlanForSubscribe={(plan) => setSelectedPlanForSubscribe(plan)}
+              onSelectPlanForSubscribe={(plan) => setSelectedPlanForCompare(plan)}
             />
           )}
 
@@ -90,6 +92,17 @@ export default function App() {
           onLogin={handleLogin}
           onLoggedOut={() => { accountSession.clear(); setActiveTab("rank"); }}
           onOpenAdmin={() => { setIsUserModalOpen(false); setActiveTab("admin"); }}
+        />
+
+        {/* 요금제 비교: 확인만 해도 내 요금제 등록 정보는 변경되지 않음 */}
+        <ComparePlanModal
+          plan={selectedPlanForCompare}
+          currentUser={currentUser}
+          onClose={() => setSelectedPlanForCompare(null)}
+          onRegister={() => {
+            setSelectedPlanForSubscribe(selectedPlanForCompare);
+            setSelectedPlanForCompare(null);
+          }}
         />
 
         {/* 요금제 개통 등록 모달 */}

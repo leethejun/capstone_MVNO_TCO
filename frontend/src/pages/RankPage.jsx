@@ -164,7 +164,7 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
             return (
               <div
                 key={p.plan_id || idx}
-                onClick={() => onSelectPlanForSubscribe({ ...p, telecom_name: telecomName })}
+                onClick={() => onSelectPlanForSubscribe({ ...p, telecom_name: telecomName, target_months: targetMonths })}
                 className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs hover:border-indigo-300 hover:shadow-md transition cursor-pointer relative group"
               >
                 {/* 랭킹 뱃지 & 통신사 */}
