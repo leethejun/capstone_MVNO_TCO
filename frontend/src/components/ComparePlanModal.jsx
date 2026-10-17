@@ -40,8 +40,7 @@ const fmtQos = (p) => !present(p?.qos_speed_mbps) ? '정보 없음' : Number(p.q
 const fmtVoice = (p) => !present(p?.voice_minutes) ? '정보 없음' : Number(p.voice_minutes) === -1 ? '무제한' : t('{{minutes}}분', { minutes: fmtNumber(p.voice_minutes) });
 const fmtSms = (p) => !present(p?.sms_count) ? '정보 없음' : Number(p.sms_count) === -1 ? '무제한' : t('{{count}}건', { count: fmtNumber(p.sms_count) });
 const fmtPeriod = (p) => !present(p?.discount_months) ? '정보 없음' : Number(p.discount_months) === -1 ? '평생 할인' : t('{{months}}개월', { months: fmtNumber(p.discount_months) });
-const fmtCarrier = (p) => p?.carrier_network || p?.network_provider || p?.mno || '정보 없음';
-const fmtTelecom = (p) => p?.telecom?.name || p?.telecom_name || '정보 없음';
+const fmtTelecom = (p) => p?.telecom?.name || '정보 없음';
 
   const [subscriptions, setSubscriptions] = useState([]);
   const [selectedId, setSelectedId] = useState('');
@@ -68,7 +67,6 @@ const fmtTelecom = (p) => p?.telecom?.name || p?.telecom_name || '정보 없음'
   const newTotal = priceTotal(plan, months);
   const rows = [
     ['제공 통신사', fmtTelecom],
-    ['통신망 (SKT/KT/LG U+)', fmtCarrier],
     ['네트워크 방식', p => p?.network_type || '정보 없음'],
     ['기본 데이터', fmtData],
     ['일일 추가 데이터', fmtDaily],
@@ -133,7 +131,7 @@ const fmtTelecom = (p) => p?.telecom?.name || p?.telecom_name || '정보 없음'
           </div>
           {oldTotal !== null && newTotal !== null && <p className="text-center text-xs font-semibold text-slate-700">{t("비용 차이: {{price}} ({{result}})", { price: money(Math.abs(oldTotal - newTotal)), result: t(oldTotal > newTotal ? "선택 요금제가 저렴" : oldTotal < newTotal ? "현재 요금제가 저렴" : "동일") })}</p>}
         </div>
-        <p className="text-[10px] leading-relaxed text-slate-500">{t("* 통신망(SK/KT/LG U+)은 현재 DB에 전용 필드가 없어 정보 없음으로 표시될 수 있습니다. LTE/5G와 제공 통신사는 별개입니다. 현재 요금제는 경과 개월 수를 반영하며, 일할 청구·유심비·해지 비용은 포함하지 않습니다.")}</p>
+        <p className="text-[10px] leading-relaxed text-slate-500">{t("* 현재 요금제는 경과 개월 수를 반영하며, 일할 청구·유심비·해지 비용은 포함하지 않습니다.")}</p>
         <button type="button" onClick={onRegister} className="w-full py-3 rounded-xl bg-indigo-600 text-white text-xs font-bold flex items-center justify-center gap-2">{t("이 요금제로 개통 등록")}<ArrowRight className="w-4 h-4" /></button>
       </div>
     </div>

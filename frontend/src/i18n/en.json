@@ -215,7 +215,6 @@
   "현재": "Current",
   "선택": "Selected",
   "제공 통신사": "Carrier",
-  "통신망 (SKT/KT/LG U+)": "Network (SKT/KT/LG U+)",
   "네트워크 방식": "Network type",
   "기본 데이터": "Base data",
   "일일 추가 데이터": "Additional daily data",
@@ -233,6 +232,6 @@
   "내 요금제를 불러오지 못했습니다.": "Could not load your plans.",
   "{{months}}개월 예상 총비용 (TCO)": "Estimated {{months}}-month total (TCO)",
   "비용 차이: {{price}} ({{result}})": "Cost difference: {{price}} ({{result}})",
-  "* 통신망(SK/KT/LG U+)은 현재 DB에 전용 필드가 없어 정보 없음으로 표시될 수 있습니다. LTE/5G와 제공 통신사는 별개입니다. 현재 요금제는 경과 개월 수를 반영하며, 일할 청구·유심비·해지 비용은 포함하지 않습니다.": "* Network (SKT/KT/LG U+) may be unavailable. It is separate from LTE/5G and the carrier. Current-plan costs account for elapsed months and exclude prorated billing, SIM fees and cancellation costs.",
-  "{{price}}원": "{{price}} KRW"
+  "{{price}}원": "{{price}} KRW",
+  "* 현재 요금제는 경과 개월 수를 반영하며, 일할 청구·유심비·해지 비용은 포함하지 않습니다.": "* Current-plan costs account for elapsed months and exclude prorated billing, SIM fees and cancellation costs."
 }
