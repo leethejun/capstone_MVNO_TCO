@@ -3,6 +3,44 @@ import React, { useState, useEffect } from 'react';
 import { getUserSubscriptions, deleteSubscription } from '../api';
 import { Calendar, CheckCircle2, Clock, ShieldAlert, PlusCircle, Trash2 } from 'lucide-react';
 
+function calculatePlanTco(plan, targetMonths) {
+  if (!plan) return null;
+
+  const months = Number(targetMonths);
+  const discountMonths = Number(plan.discount_months);
+  const discountPrice = Number(plan.discount_price);
+  const normalPrice = Number(plan.normal_price);
+
+  // 유효하지 않은 가격이나 기간은 계산하지 않는다.
+  if (
+    !Number.isFinite(months) ||
+    months <= 0 ||
+    !Number.isFinite(discountMonths) ||
+    discountMonths < -1 ||
+    !Number.isFinite(discountPrice) ||
+    !Number.isFinite(normalPrice) ||
+    discountPrice < 0 ||
+    normalPrice <= 0 ||
+    normalPrice < discountPrice
+  ) {
+    return null;
+  }
+
+  // -1은 평생 할인으로 처리한다.
+  if (discountMonths === -1) {
+    return discountPrice * months;
+  }
+
+  // 할인 기간과 정상가 적용 기간을 분리한다.
+  const discountedMonths = Math.min(months, discountMonths);
+  const normalMonths = Math.max(0, months - discountedMonths);
+
+  return (
+    discountPrice * discountedMonths +
+    normalPrice * normalMonths
+  );
+}
+
 export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpenUserModal }) {
   const { t } = useI18n();
   const [subscriptions, setSubscriptions] = useState([]);
@@ -114,6 +152,29 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
           const discountPrice = Number(plan.discount_price || 0);
           const normalPrice = Number(plan.normal_price || discountPrice);
           const notifications = sub.notifications || [];
+          
+const recommendedPlan = notifications.find(
+  (notification) => notification.recommended_plan
+)?.recommended_plan;
+
+const currentTco = calculatePlanTco(
+  plan,
+  sub.target_months
+);
+
+const recommendedTco = calculatePlanTco(
+  recommendedPlan,
+  sub.target_months
+);
+
+const canCompareTco =
+  currentTco !== null &&
+  recommendedTco !== null;
+
+const savings = canCompareTco
+  ? currentTco - recommendedTco
+  : null;
+
 
           return (
             <div key={sub.subscription_id} className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
@@ -177,6 +238,73 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
                   )}
                 </div>
               </div>
+              
+{canCompareTco && (
+  <div
+    className={`rounded-2xl border p-4 space-y-3 ${
+      savings >= 0
+        ? 'bg-emerald-50 border-emerald-200'
+        : 'bg-amber-50 border-amber-200'
+    }`}
+  >
+    <div className="flex items-center gap-2">
+      <span className="text-lg">
+        {savings >= 0 ? '💰' : '⚠️'}
+      </span>
+      <span className="text-sm font-bold text-slate-800">
+        {savings >= 0
+          ? t("예상 절약 금액")
+          : t("예상 비용 증가")}
+      </span>
+    </div>
+
+    <div
+      className={`text-2xl font-black ${
+        savings >= 0 ? 'text-emerald-700' : 'text-amber-700'
+      }`}
+    >
+      {Math.abs(savings).toLocaleString()}
+      <span className="ml-1 text-sm font-semibold">
+        {t("원")}
+      </span>
+    </div>
+
+    <p className="text-xs text-slate-600">
+      {t("동일한 {{months}}개월 기준으로 계산한 예상 금액입니다.", {
+        months: sub.target_months,
+      })}
+    </p>
+
+    <div className="border-t border-slate-200/80 pt-3 space-y-2 text-xs">
+      <div className="flex justify-between gap-3">
+        <span className="text-slate-600">
+          {t("현재 요금제 예상 총비용")}
+        </span>
+        <span className="font-bold text-slate-800">
+          {currentTco.toLocaleString()}{t("원")}
+        </span>
+      </div>
+
+      <div className="flex justify-between gap-3">
+        <span className="text-slate-600">
+          {t("추천 요금제 예상 총비용")}
+        </span>
+        <span className="font-bold text-slate-800">
+          {recommendedTco.toLocaleString()}{t("원")}
+        </span>
+      </div>
+
+      <div className="pt-1">
+        <span className="text-slate-500">
+          {t("추천 요금제")}:{" "}
+        </span>
+        <span className="font-semibold text-slate-800">
+          {recommendedPlan.title}
+        </span>
+      </div>
+    </div>
+  </div>
+)}
 
               <div className="flex items-center justify-between gap-3 text-xs">
                 <span className="text-slate-500">{t("유지기간 {{months}}개월", { months: sub.target_months })}</span>
