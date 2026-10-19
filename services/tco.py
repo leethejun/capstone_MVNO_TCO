@@ -118,14 +118,20 @@ def rank_plans_by_tco(plans: List[Plan], target_months: int) -> List[PlanRankIte
         )
         ranked_items.append(rank_item)
 
-    # TCO 오름차순 정렬 (동일 TCO 시: 무제한 여부 -> QoS 속도 높은 순 -> 기본 데이터 많은 순)
+ 
+    # TCO가 같으면 통신 조건이 좋은 요금제를 우선한다.
     ranked_items.sort(
         key=lambda x: (
             x.tco,
             -int(x.is_unlimited_data),
             -x.qos_speed_mbps,
             -x.daily_data_gb,
-            -x.base_data_gb
+            -x.base_data_gb,
+            -int(x.voice_minutes == -1),
+            -int(x.sms_count == -1),
+            -(x.voice_minutes if x.voice_minutes >= 0 else 0),
+            -(x.sms_count if x.sms_count >= 0 else 0),
         )
     )
-    return ranked_items
+
+

@@ -78,6 +78,40 @@ class RankingRegressions(unittest.TestCase):
     def test_hub_missing_price_is_not_free(self):
         card = BeautifulSoup('<div data-product-id="1"><p class="tit">7GB</p></div>', "html.parser").div
         self.assertIsNone(MvnohubCrawler()._parse_card(card))
+    
+    
+    def test_equal_tco_prefers_unlimited_voice(self):
+        def make_plan(plan_id, voice_minutes):
+            return Plan(
+                plan_id=plan_id,
+                telecom_id=1,
+                title=f"테스트 요금제 {plan_id}",
+                network_type="LTE",
+                base_data_gb=10,
+                daily_data_gb=0,
+                qos_speed_mbps=0,
+                voice_minutes=voice_minutes,
+                sms_count=100,
+                discount_price=10000,
+                normal_price=10000,
+                discount_months=12,
+                raw_text="",
+                is_active=True,
+                scraped_at=datetime.now(),
+            )
+
+        plans = [
+            make_plan(1, 100),
+            make_plan(2, -1),
+        ]
+
+        ranked = rank_plans_by_tco(plans, target_months=12)
+
+        self.assertEqual(
+            [item.plan_id for item in ranked],
+            [2, 1],
+        )
+
 
 
 if __name__ == "__main__":
