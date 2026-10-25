@@ -7,6 +7,7 @@ from deploy.refresh_eyes import refresh
 from database import SessionLocal
 from models import Telecom,Plan,UserSubscription,Notification
 from parser import PlanTextParser
+from services.crawler.pricing_validation import valid_pricing
 from datetime import datetime
 from services.crawler.bank_eligibility import requires_financial_product
 from services.crawler.telecom_registry import is_excluded_telecom
@@ -26,7 +27,7 @@ def replace(name,records):
             key=(r['title'],r['discount_price'],r['normal_price'],r['discount_months'],r['raw_text'])
             if key in seen: continue
             seen.add(key)
-            assert r['normal_price']>0 and 0<=r['discount_price']<=r['normal_price'] and r['discount_months']>=-1
+            assert valid_pricing(r), '공식 가격/기간 검증 실패'
             p=PlanTextParser.parse(r['raw_text']);p={f:p[f] for f in ['base_data_gb','daily_data_gb','qos_speed_mbps','voice_minutes','sms_count']}
             new.append(Plan(telecom_id=carrier.telecom_id,title=r['title'],network_type=r['network_type'],discount_price=r['discount_price'],normal_price=r['normal_price'],discount_months=r['discount_months'],raw_text=r['raw_text'],scraped_at=datetime.now(),is_active=True,**p))
         if not new:raise ValueError('금융 조건 제외 후 검증된 일반 상품 없음')

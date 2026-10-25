@@ -17,7 +17,7 @@ class BaseCrawler(ABC):
             "title": str,              # 요금제명 (예: "KT망 5G 요금제 초저가 모음")
             "network_type": str,       # 망 종류 ("LTE", "5G" 등)
             "discount_price": int,     # 프로모션 할인 요금
-            "normal_price": int,       # 프로모션 종료 후 정상 요금
+            "normal_price": Optional[int],  # 미공개는 None + 가격 검증 마커, 알려진 가격으로 대체하지 않음
             "discount_months": int,    # 할인 제공 개월 수
             "raw_text": str            # 스펙 및 비정형 텍스트 (예: "15GB+3Mbps 음성200분 문자100건")
         }

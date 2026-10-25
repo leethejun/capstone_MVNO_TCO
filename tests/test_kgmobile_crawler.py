@@ -88,7 +88,8 @@ class KgMobileTests(unittest.TestCase):
         raw = KgMobileCrawler.parse_plan(sample()); raw['telecom_name'] = 'Other'
         with patch('services.crawler.pipeline.sync_telecom_master', return_value={'total_master': 2}), \
              patch('services.crawler.pipeline.MvnohubCrawler') as hub, \
-             patch('services.crawler.pipeline.DirectTelecomCrawler') as direct:
+             patch('services.crawler.pipeline.DirectTelecomCrawler') as direct, \
+             patch.dict('os.environ', {'CRAWLER_REPORT_PATH':'/tmp/test-kg-pipeline-report.json'}):
             hub.return_value.fetch_raw_plans.return_value = [raw]
             hub.return_value.complete = True
             hub.return_value.errors = []

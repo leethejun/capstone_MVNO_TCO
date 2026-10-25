@@ -67,13 +67,8 @@ class DirectTelecomCrawler(BaseCrawler):
             except Exception as exc:
                 official_plans = []
                 error = str(exc)
-            valid_plans = [plan for plan in official_plans
-                           if isinstance(plan.get('discount_price'), int)
-                           and isinstance(plan.get('normal_price'), int)
-                           and 0 <= plan['discount_price'] <= plan['normal_price']
-                           and plan['normal_price'] > 0
-                           and isinstance(plan.get('discount_months'), int)
-                           and plan['discount_months'] >= -1]
+            from services.crawler.pricing_validation import valid_pricing
+            valid_plans = [plan for plan in official_plans if valid_pricing(plan)]
             if len(valid_plans) != len(official_plans):
                 self.failed_telecom_names.add(name)
                 error = f'가격/기간 검증 실패 {len(official_plans) - len(valid_plans)}건: 이전 상품은 추천에서 제외'
@@ -180,12 +175,37 @@ class DirectTelecomCrawler(BaseCrawler):
         if not home_url or not home_url.startswith("http"):
             return plans
 
+        from services.crawler.menu_catalog import MenuCatalogCrawler, URLS
+        if telecom_name in URLS:
+            crawler = MenuCatalogCrawler(telecom_name)
+            records = crawler.fetch_raw_plans()
+            if crawler.skipped:
+                self.failed_telecom_names.add(telecom_name)
+                self._official_errors[telecom_name] = f'공식 상세 가격/기간 미확인 {len(crawler.skipped)}개: ' + ', '.join(crawler.skipped)
+            return records
+
+        if telecom_name in ('밸류컴','퍼스트 모바일'):
+            from services.crawler.gnuboard_plans import GnuboardCatalogCrawler
+            crawler=GnuboardCatalogCrawler(telecom_name)
+            records=crawler.fetch_raw_plans()
+            if crawler.skipped:
+                self.failed_telecom_names.add(telecom_name)
+                self._official_errors[telecom_name]=f'공식 후불 상세 검증 누락 {crawler.skipped}'
+            return records
+
         # 1. 특화 크롤러가 있는 주요 사업자
         from services.crawler.structured_official import PinCrawler, AlbireoCrawler, MonaCrawler, GmeCrawler, EumCrawler, ErelCrawler, S1Crawler, KoretelCrawler, ShakeCrawler
         from services.crawler.flash_crawler import FlashCrawler
         from services.crawler.won_crawler import WonCrawler
         from services.crawler.kb_crawler import KbCrawler
-        dedicated={'KB리브모바일':KbCrawler,'핀다이렉트':PinCrawler,'알비레오':AlbireoCrawler,'MONA':MonaCrawler,'GME모바일':GmeCrawler,'이음모바일':EumCrawler,'에르엘':ErelCrawler,'에스원 안심모바일':S1Crawler,'플래시모바일':FlashCrawler,'한국E텔레콤':KoretelCrawler,'우리WON모바일':WonCrawler,'쉐이크모바일':ShakeCrawler}
+        from services.crawler.well_crawler import WellCrawler
+        from services.crawler.smartel_crawler import SmartelCrawler
+        from services.crawler.expanded_catalogs import AMobileCrawler, TossCrawler, SkylifeCrawler
+        from services.crawler.ktm_crawler import KtmCrawler
+        from services.crawler.eyagi_crawler import EyagiCrawler
+        from services.crawler.large_carriers import UplusCrawler, HelloCrawler
+        from services.crawler.dream_crawler import DreamCrawler
+        dedicated={'드림라인 모바일':DreamCrawler,'U+유모바일':UplusCrawler,'헬로모바일':HelloCrawler,'이야기모바일':EyagiCrawler,'KT M모바일':KtmCrawler,'A모바일(에넥스텔레콤)':AMobileCrawler,'토스모바일':TossCrawler,'KT스카이라이프':SkylifeCrawler,'스마텔':SmartelCrawler,'위너스텔(WELL)':WellCrawler,'KB리브모바일':KbCrawler,'핀다이렉트':PinCrawler,'알비레오':AlbireoCrawler,'MONA':MonaCrawler,'GME모바일':GmeCrawler,'이음모바일':EumCrawler,'에르엘':ErelCrawler,'에스원 안심모바일':S1Crawler,'플래시모바일':FlashCrawler,'한국E텔레콤':KoretelCrawler,'우리WON모바일':WonCrawler,'쉐이크모바일':ShakeCrawler}
         if telecom_name in dedicated:
             crawler=dedicated[telecom_name]()
             records=crawler.fetch_raw_plans()

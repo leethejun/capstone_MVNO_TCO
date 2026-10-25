@@ -188,9 +188,38 @@ class EumCrawler:
 
 class ErelCrawler:
     URL='https://www.erel.co.kr/nf-mvno-user/graphql'
-    FIELDS='code name socDesc mnoGubun basePrice salePrice originalPrice discountPeriod discountUnit priceDesc srvtp data dataUnit dataDesc additionalData additionalDataUnit isDataQos dataQos voc vocDesc isVocInfinity sms smsDesc isSmsInfinity isUse isFront isUseNew isUseTransfer isHasAgreement planType socType isMonthly ord cnusecd'
+    FIELDS='tags isAtPeriodTimes code name socDesc mnoGubun basePrice salePrice originalPrice discountPeriod discountUnit priceDesc srvtp data dataUnit dataDesc additionalData additionalDataUnit isDataQos dataQos voc vocDesc isVocInfinity sms smsDesc isSmsInfinity isUse isFront isUseNew isUseTransfer isHasAgreement planType socType isMonthly ord cnusecd'
+
+    @staticmethod
+    def parse(item, lifetime_tag_ids):
+        item=dict(item)
+        if not item.get('discountUnit') and not item.get('discountPeriod'):
+            if set((item.get('tags') or '').split(',')) & lifetime_tag_ids:
+                item['discountUnit']='always'
+        # dataDesc is supplemental QoS / daily text, not the monthly allowance.
+        base=float(item.get('data') or 0)/1024
+        description=item.get('dataDesc') or ''
+        daily=re.search(r'(?:매일|일)\s*(\d+(?:\.\d+)?)\s*GB',description+' '+item['name'],re.I)
+        everyday=bool(re.search(r'매일',description+' '+item['name']))
+        if everyday and not daily:
+            daily_amount=base; base=0
+        else:
+            daily_amount=float(daily[1]) if daily else 0
+            if everyday:base=0
+        item['dataDesc']=f'{base:g}GB'
+        if daily_amount:item['dataDesc']+=f' + 매일 {daily_amount:g}GB'
+        qos=re.search(r'(\d+(?:\.\d+)?)\s*(Mbps|Kbps)',description,re.I)
+        if not item.get('isDataQos') and qos:
+            item['dataDesc']+=f' + {qos[1]}{qos[2]}'
+        # An on-net single-line unlimited benefit does not make 300 minutes unlimited.
+        item['vocDesc']='';item['smsDesc']=''
+        return EumCrawler.parse(item,'에르엘')
 
     def fetch_raw_plans(self):
+        tag_response=requests.post(self.URL,json={'query':'query {getCmTags {id gubun name}}'},timeout=25)
+        tag_response.raise_for_status();tags=tag_response.json()
+        if tags.get('errors'):raise ValueError('에르엘 공식 할인 태그 조회 실패')
+        lifetime_tag_ids={t['id'] for t in tags['data']['getCmTags'] if t['gubun']=='soc_tag' and t['name']=='평생할인'}
         query='query getCmSocs($where:CmSocWhereInput){getCmSocs(where:$where){'+self.FIELDS+'}}'
         where={'workerId':{'not':None},'cnusecd':{'equals':'R'},'isUse':{'equals':True},'isFront':{'equals':True},'ord':{'not':None}}
         r=requests.post(self.URL,json={'query':query,'variables':{'where':where}},timeout=25);r.raise_for_status();payload=r.json()
@@ -201,7 +230,7 @@ class ErelCrawler:
         self.skipped=[]
         for x in items:
             try:
-                if (p:=EumCrawler.parse(x,'에르엘')):plans.append(p)
+                if (p:=self.parse(x,lifetime_tag_ids)):plans.append(p)
             except ValueError:
                 self.skipped.append(x['name'])
         return plans

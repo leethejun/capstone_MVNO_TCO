@@ -3,6 +3,7 @@ import re
 from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
+from services.crawler.pricing_validation import UNKNOWN_NORMAL_MARKER
 
 
 def amount(text):
@@ -10,13 +11,29 @@ def amount(text):
     return int(m[1].replace(',', '')) if m else None
 
 
-def detail_base(soup):
+def detail_base(soup, after_temporary_discount=False):
     for table in soup.select('table'):
-        heads = [h.get_text(' ', strip=True) for h in table.select('thead th')]
+        rows = table.select('tr')
+        if len(rows) < 2:
+            continue
+        # Some official editor tables use td for both headings and values.
+        heads = [h.get_text(' ', strip=True) for h in rows[0].find_all(['th', 'td'], recursive=False)]
         index = next((i for i, h in enumerate(heads) if '기본료' in h), None)
-        cells = table.select('tbody tr:first-child td')
-        if index is not None and len(cells) > index:
-            return amount(cells[index].get_text(strip=True))
+        cells = rows[1].find_all(['th', 'td'], recursive=False)
+        if index is None or len(cells) != len(heads):
+            continue
+        base = amount(cells[index].get_text(' ', strip=True))
+        if base is None:
+            continue
+        if after_temporary_discount:
+            permanent = next((i for i, h in enumerate(heads) if '평생할인' in h.replace(' ', '')), None)
+            if permanent is not None:
+                text = cells[permanent].get_text(' ', strip=True)
+                discount = 0 if text in ('', '-', '—') else amount(text)
+                if discount is None or discount < 0 or discount >= base:
+                    return None
+                base -= discount
+        return base
     return None
 
 
@@ -67,15 +84,15 @@ def parse_menu_cards(soup, name, url, network, fetch_detail=None):
                         response = requests.get(href, timeout=10)
                         response.raise_for_status()
                         detail = BeautifulSoup(response.content, 'html.parser')
-                    normal = detail_base(detail)
+                    normal = detail_base(detail, after_temporary_discount=months > 0)
                 except requests.RequestException:
                     continue
-            if normal is None:
+            if normal is None and months != -1:
                 continue
             if months == 0 and normal != discount:
                 # 할인은 있으나 종료 조건을 확인하지 못했으므로 추측하지 않는다.
                 continue
-        if months < -1 or normal < discount or normal <= 0:
+        if months < -1 or (normal is not None and (normal < discount or normal <= 0)):
             continue
         specs = card.select('.desc li')
         data = specs[0].get_text(' ', strip=True) if specs else ''
@@ -88,5 +105,5 @@ def parse_menu_cards(soup, name, url, network, fetch_detail=None):
         result.append(dict(telecom_name=name,title=f'[공식몰] {title}',
             network_type='5G' if re.search(r'\b5G\b',text) else 'LTE',
             discount_price=discount,normal_price=normal,discount_months=months,
-            raw_text=f'{title} | 데이터 {data} | 통화 {voice} | 문자 {sms} | 망: {carrier} | {text} [출처: {name} 공식홈페이지] [상품 URL: {href}]'))
+            raw_text=f'{title} | 데이터 {data} | 통화 {voice} | 문자 {sms} | 망: {carrier} | {text} [출처: {name} 공식홈페이지] [상품 URL: {href}]'+(' '+UNKNOWN_NORMAL_MARKER if normal is None else '')))
     return result
