@@ -80,3 +80,11 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(self.db.get(Plan, old_id).normal_price, 1000)
         self.assertIsNone(self.db.query(Notification).one().recommended_plan_id)
         self.assertEqual(self.db.query(Plan).filter(Plan.is_active==True).count(),1)
+
+    def test_verified_unknown_normal_price_survives_catalog_snapshot(self):
+        from services.crawler.pricing_validation import UNKNOWN_NORMAL_MARKER
+        record={**self.raw,'normal_price':None,'discount_months':-1,
+                'raw_text':self.raw['raw_text']+' '+UNKNOWN_NORMAL_MARKER}
+        result=self.run_snapshot(records=[record])
+        self.assertTrue(result['success'])
+        self.assertIsNone(self.db.query(Plan).filter(Plan.is_active==True).one().normal_price)

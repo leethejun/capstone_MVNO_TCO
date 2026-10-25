@@ -1,7 +1,8 @@
 import unittest
 from copy import deepcopy
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import patch, Mock
+import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base, Plan, Telecom, User, UserSubscription
@@ -88,7 +89,8 @@ class KgMobileTests(unittest.TestCase):
         raw = KgMobileCrawler.parse_plan(sample()); raw['telecom_name'] = 'Other'
         with patch('services.crawler.pipeline.sync_telecom_master', return_value={'total_master': 2}), \
              patch('services.crawler.pipeline.MvnohubCrawler') as hub, \
-             patch('services.crawler.pipeline.DirectTelecomCrawler') as direct:
+             patch('services.crawler.pipeline.DirectTelecomCrawler') as direct, \
+             patch.dict('os.environ', {'CRAWLER_REPORT_PATH':'/tmp/test-kg-pipeline-report.json'}):
             hub.return_value.fetch_raw_plans.return_value = [raw]
             hub.return_value.complete = True
             hub.return_value.errors = []
@@ -118,6 +120,45 @@ class KgMobileTests(unittest.TestCase):
         self.assertEqual(subscription.plan_id, plan.plan_id); self.assertEqual(plan.discount_price, 2900)
         self.assertFalse(plan.is_active); self.assertEqual(db.query(Plan).count(), 2)
         db.close(); engine.dispose()
+
+
+class KgRequestRecoveryTests(unittest.TestCase):
+    def response(self, rows, total=1):
+        response=Mock()
+        response.json.return_value={'code':1,'entity':{'list':rows,'pageInfo':{'totalPage':total}}}
+        return response
+
+    def test_read_timeout_retries_same_page_without_losing_previous_pages(self):
+        crawler=KgMobileCrawler(delay_sec=0)
+        with patch('services.crawler.kgmobile_crawler.requests.get',side_effect=[
+                self.response([{'planNo':1}],2),requests.ReadTimeout('slow'),self.response([{'planNo':2}],2)]) as get, \
+                patch('services.crawler.kgmobile_crawler.time.sleep'):
+            rows=crawler._get_list('/api/product/plan',{})
+        self.assertEqual([r['planNo'] for r in rows],[1,2])
+        self.assertEqual([c.kwargs['params']['page'] for c in get.call_args_list],[1,2,2])
+
+    def test_exhausted_retries_do_not_return_partial_catalog(self):
+        crawler=KgMobileCrawler(delay_sec=0)
+        with patch('services.crawler.kgmobile_crawler.requests.get',side_effect=[self.response([{'planNo':1}],2)]+[requests.ReadTimeout('slow')]*3), \
+                patch('services.crawler.kgmobile_crawler.time.sleep'):
+            with self.assertRaisesRegex(RuntimeError,'page=2.*3회'):
+                crawler._get_list('/api/product/plan',{})
+
+    def test_permanent_http_error_is_not_retried(self):
+        crawler=KgMobileCrawler(delay_sec=0)
+        error=requests.HTTPError('404',response=Mock(status_code=404))
+        with patch('services.crawler.kgmobile_crawler.requests.get',side_effect=error) as get:
+            with self.assertRaises(RuntimeError):crawler._get_list('/api/product/plan',{})
+        self.assertEqual(get.call_count,1)
+
+    def test_timeout_cause_is_visible_in_full_crawl_coverage(self):
+        crawler=DirectTelecomCrawler(delay_sec=0)
+        with patch('services.crawler.direct_crawlers.KgMobileCrawler') as kg:
+            kg.return_value.fetch_raw_plans.side_effect=RuntimeError('KG API timeout after 3 attempts')
+            result=crawler._crawl_brand_official_site('KG모바일',KgMobileCrawler.BASE_URL,'LGU+')
+        self.assertEqual(result,[])
+        self.assertIn('timeout',crawler._official_errors['KG모바일'])
+        self.assertGreaterEqual(kg.call_args.kwargs['timeout'],30)
 
 
 if __name__ == '__main__': unittest.main()

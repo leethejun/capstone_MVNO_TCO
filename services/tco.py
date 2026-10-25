@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from models import Plan
 from schemas import PlanRankItem, TelecomResponse
 
@@ -7,7 +7,7 @@ def calculate_tco(
     target_months: int,
     discount_months: int,
     discount_price: int,
-    normal_price: int
+    normal_price: Optional[int]
 ) -> Dict[str, int]:
     """
     사용자의 목표 유지 기간에 따른 TCO(총소유비용) 및 월 환산 평균 비용 산출
@@ -17,6 +17,8 @@ def calculate_tco(
     if target_months <= 0:
         target_months = 1
 
+    if normal_price is None and discount_months != -1 and target_months > discount_months:
+        raise ValueError('선택한 유지기간의 할인 종료 후 가격 미확인')
     if discount_months == -1 or target_months <= discount_months:
         discount_period = target_months
         normal_period = 0
@@ -60,10 +62,13 @@ def rank_plans_by_tco(plans: List[Plan], target_months: int) -> List[PlanRankIte
     for plan in plans:
         # 과거 크롤러가 누락된 가격을 0원으로 저장한 레코드는 추천하지 않는다.
         # 정상가가 확인된 0원 프로모션은 유효하다.
-        if (plan.discount_price is None or plan.normal_price is None
-                or plan.discount_price < 0 or plan.normal_price <= 0
-                or plan.normal_price < plan.discount_price
+        if (plan.discount_price is None or plan.discount_price < 0
                 or plan.discount_months is None or plan.discount_months < -1):
+            continue
+        if plan.normal_price is None:
+            if plan.discount_months != -1 and target_months > plan.discount_months:
+                continue
+        elif plan.normal_price <= 0 or plan.normal_price < plan.discount_price:
             continue
         raw = plan.raw_text or ""
         # 종량제·충전형 요금은 사용량 없이 월 고정 TCO를 계산할 수 없다.

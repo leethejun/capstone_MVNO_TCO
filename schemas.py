@@ -23,7 +23,7 @@ class PlanBase(BaseModel):
     voice_minutes: int = 0
     sms_count: int = 0
     discount_price: int
-    normal_price: int
+    normal_price: Optional[int]
     discount_months: int
     raw_text: Optional[str] = None
     is_active: bool = True

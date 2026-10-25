@@ -2,7 +2,10 @@
 import html
 import re
 import time
-import requests
+import json
+import ssl
+import urllib.request
+from pathlib import Path
 from bs4 import BeautifulSoup
 from services.crawler.structured_official import amount, record
 
@@ -13,7 +16,13 @@ class WonCrawler:
     def query(self,code,data):
         body={'messageId':int(time.time()*1000),'systemId':'S00001','apiKey':'1234567890',
               'serviceId':code,'timestamp':time.strftime('%Y-%m-%d %H:%M:%S'),'data':data}
-        response=requests.post(self.BASE+code,json=body,timeout=20);response.raise_for_status();payload=response.json()
+        # The server omits its GeoTrust intermediate. Keep hostname/root
+        # validation enabled and supply only that publicly verifiable chain link.
+        context=ssl.create_default_context()
+        context.load_verify_locations(str(Path(__file__).with_name('certificates')/'geotrust-ev-rsa-ca-g2.pem'))
+        request=urllib.request.Request(self.BASE+code,data=json.dumps(body).encode(),headers={'Content-Type':'application/json'})
+        with urllib.request.urlopen(request,context=context,timeout=20) as response:
+            payload=json.load(response)
         if payload.get('resultCode')!='00000000':raise ValueError('우리WON 공개 상품 조회 실패')
         return payload['data']
 
@@ -31,6 +40,12 @@ class WonCrawler:
         plans=[];self.skipped=[];self.excluded=[]
         for item in items:
             details=self.query('LMPM000008',{'soId':item['soId'],'prodCd':item['prodCd']})['dsRes']
+            # Product-specific financial conditions are exclusions, not an API
+            # failure merely because several service-description rows exist.
+            product_text=' '.join(BeautifulSoup(html.unescape(' '.join(d.get(k) or '' for k in ('srvDesc','subscribeDesc','bigo1Desc','bigo2Desc','bigo3Desc','bigo4Desc','bigo5Desc'))),'html.parser').get_text(' ',strip=True) for d in details)
+            if ('금융' in (item.get('maxDisDesc') or '') or re.search(r'은행\s*거래|급여\s*이체|예\s*[·ㆍ]?\s*적금|금융\s*(?:할인|거래|혜택)',product_text)):
+                self.excluded.append(item['prodNm']+' (금융상품 조건)')
+                continue
             descriptions={BeautifulSoup(html.unescape(d.get('srvDesc') or d.get('subscribeDesc') or ''),'html.parser').get_text(' ',strip=True) for d in details}
             if len(descriptions)!=1 or not next(iter(descriptions),''):
                 self.skipped.append(item['prodNm']+' (공식 상세 조건 누락 또는 불일치)')

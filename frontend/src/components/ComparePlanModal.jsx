@@ -7,10 +7,13 @@ const present = (v) => v !== null && v !== undefined && v !== '';
 
 function priceTotal(plan, months, elapsedMonths = 0) {
   const discount = Number(plan?.discount_price);
-  const normal = Number(plan?.normal_price);
+  const normal = present(plan?.normal_price) ? Number(plan.normal_price) : null;
   const period = Number(plan?.discount_months);
-  if (!present(plan?.discount_price) || !present(plan?.normal_price) || !present(plan?.discount_months) ||
-      ![discount, normal, period].every(Number.isFinite) || discount < 0 || normal <= 0 || period < -1) return null;
+  if (!present(plan?.discount_price) || !present(plan?.discount_months) ||
+      ![discount, period].every(Number.isFinite) || discount < 0 || period < -1) return null;
+  if (normal === null) {
+    if (period !== -1 && elapsedMonths + months > period) return null;
+  } else if (!Number.isFinite(normal) || normal <= 0 || normal < discount) return null;
   let total = 0;
   for (let month = 0; month < months; month++) total += (period === -1 || elapsedMonths + month < period) ? discount : normal;
   return total;

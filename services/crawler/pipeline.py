@@ -98,12 +98,8 @@ def run_comprehensive_crawler_pipeline(
             if requires_financial_product(rdata):
                 stats["excluded_financial_products"] += 1
                 continue
-            discount = rdata.get("discount_price")
-            normal = rdata.get("normal_price")
-            months = rdata.get("discount_months")
-            if (not isinstance(discount, int) or not isinstance(normal, int)
-                    or discount < 0 or normal <= 0 or normal < discount
-                    or not isinstance(months, int) or months < -1):
+            from services.crawler.pricing_validation import valid_pricing
+            if not valid_pricing(rdata):
                 stats["skipped_invalid_prices"] += 1
                 for row in stats['coverage']:
                     if row['name'] == rdata.get('telecom_name'):

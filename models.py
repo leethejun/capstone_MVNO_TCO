@@ -52,7 +52,7 @@ class Plan(Base):
     voice_minutes = Column(Integer, default=0)
     sms_count = Column(Integer, default=0)
     discount_price = Column(Integer, nullable=False)
-    normal_price = Column(Integer, nullable=False)
+    normal_price = Column(Integer, nullable=True)  # 공식 정상가 미공개는 NULL
     discount_months = Column(Integer, nullable=False)
     raw_text = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)

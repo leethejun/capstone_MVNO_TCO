@@ -112,7 +112,7 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
           const plan = sub.plan || {};
           const telecomName = plan.telecom?.name || t("알뜰폰");
           const discountPrice = Number(plan.discount_price || 0);
-          const normalPrice = Number(plan.normal_price || discountPrice);
+          const normalPrice = plan.normal_price == null ? null : Number(plan.normal_price);
           const notifications = sub.notifications || [];
 
           return (
@@ -163,14 +163,14 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
                   </div>
                   <div className="bg-slate-50 p-2.5 rounded-xl">
                     <span className="text-slate-400 text-[10px] block">{t("할인 만료 후 정상 요금")}</span>
-                    <span className="font-bold text-rose-600 text-sm">{normalPrice.toLocaleString()}{t("원")}</span>
+                    <span className="font-bold text-rose-600 text-sm">{normalPrice == null ? t("미확인") : `${normalPrice.toLocaleString()}${t("원")}`}</span>
                   </div>
                 </div>
 
                 {/* 만료 후 요금 인상 경고문 */}
                 <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between px-1">
                   <span>{plan.discount_months === -1 ? t("평생 할인") : t("할인 종료일: {{date}}", { date: sub.discount_end_date })}</span>
-                  {normalPrice > discountPrice && (
+                  {plan.discount_months !== -1 && normalPrice != null && normalPrice > discountPrice && (
                     <span className="text-rose-500 font-semibold">
                       {t("만료 후 월 {{price}}원 추가 청구", { price: (normalPrice - discountPrice).toLocaleString() })}
                     </span>
