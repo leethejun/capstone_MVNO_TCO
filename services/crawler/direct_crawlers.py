@@ -224,14 +224,15 @@ class DirectTelecomCrawler(BaseCrawler):
             return EyesCrawler(headers=self.HEADERS, timeout=self.timeout, delay_sec=self.delay_sec).fetch_raw_plans()
         if 'KG모바일' in clean_name or 'kgmobile.co.kr' in home_url:
             try:
-                crawler = KgMobileCrawler(timeout=self.timeout, delay_sec=self.delay_sec)
+                crawler = KgMobileCrawler(timeout=max(self.timeout, 30), delay_sec=self.delay_sec)
                 plans = crawler.fetch_raw_plans()
                 if crawler.skipped:
                     self.failed_telecom_names.add(telecom_name)
                     self._official_errors[telecom_name] = f'가격/스펙 검증 실패 {crawler.skipped}건: 이전 상품은 추천에서 제외'
                 return plans
             except Exception as error:
-                self.failed_telecom_names.add('KG모바일')
+                self.failed_telecom_names.add(telecom_name)
+                self._official_errors[telecom_name] = str(error)
                 print(f'[DirectTelecomCrawler] KG모바일 수집 실패: {error}')
                 return []
         if "프리티" in clean_name:

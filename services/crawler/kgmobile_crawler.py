@@ -13,10 +13,11 @@ class KgMobileCrawler(BaseCrawler):
     BASE_URL = 'https://www.kgmobile.co.kr'
     HEADERS = {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json', 'Referer': BASE_URL + '/plan'}
 
-    def __init__(self, timeout=15, delay_sec=0.1):
+    def __init__(self, timeout=30, delay_sec=0.1, max_attempts=3):
         self.timeout = timeout
         self.delay_sec = delay_sec
         self.skipped = 0
+        self.max_attempts = max_attempts
 
     @staticmethod
     def available(item, now=None):
@@ -33,14 +34,27 @@ class KgMobileCrawler(BaseCrawler):
                     return False
         return True
 
+    def _request_page(self, endpoint, params):
+        for attempt in range(self.max_attempts):
+            try:
+                response = requests.get(self.BASE_URL + endpoint, params=params,
+                                        headers=self.HEADERS, timeout=self.timeout)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as error:
+                status = error.response.status_code if error.response is not None else None
+                retryable = isinstance(error, (requests.Timeout, requests.ConnectionError)) or status in (429, 500, 502, 503, 504)
+                if not retryable or attempt + 1 >= self.max_attempts:
+                    raise RuntimeError(f'KG모바일 {endpoint} page={params["page"]} 조회 실패 '
+                                       f'({attempt + 1}회 시도): {error}') from error
+                time.sleep(min(2 ** attempt, 4))
+        raise ValueError('KG모바일 재시도 횟수는 1 이상이어야 합니다.')
+
     def _get_list(self, endpoint, params):
         """긍정적인 page/limit로 실제 totalPage까지 수집한다. 실패 시 부분 결과를 반환하지 않는다."""
         items = []
         for page in range(1, 101):
-            response = requests.get(self.BASE_URL + endpoint,
-                                    params={**params, 'page': page, 'limit': 100},
-                                    headers=self.HEADERS, timeout=self.timeout)
-            response.raise_for_status()
+            response = self._request_page(endpoint, {**params, 'page': page, 'limit': 100})
             payload = response.json()
             entity = payload.get('entity') or {}
             batch = entity.get('list')
