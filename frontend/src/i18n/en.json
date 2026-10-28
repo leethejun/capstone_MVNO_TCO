@@ -233,5 +233,11 @@
   "{{months}}개월 예상 총비용 (TCO)": "Estimated {{months}}-month total (TCO)",
   "비용 차이: {{price}} ({{result}})": "Cost difference: {{price}} ({{result}})",
   "{{price}}원": "{{price}} KRW",
-  "* 현재 요금제는 경과 개월 수를 반영하며, 일할 청구·유심비·해지 비용은 포함하지 않습니다.": "* Current-plan costs account for elapsed months and exclude prorated billing, SIM fees and cancellation costs."
+  "* 현재 요금제는 경과 개월 수를 반영하며, 일할 청구·유심비·해지 비용은 포함하지 않습니다.": "* Current-plan costs account for elapsed months and exclude prorated billing, SIM fees and cancellation costs.",
+  "예상 절약 금액": "Estimated savings",
+  "예상 비용 증가": "Estimated extra cost",
+  "앞으로 {{months}}개월 기준으로 계산한 예상 금액입니다. 현재 요금제는 이미 지난 할인 기간을 반영합니다.": "Estimated over the next {{months}} months. The current plan accounts for discount months already used.",
+  "현재 요금제 예상 총비용": "Current plan estimated total",
+  "추천 요금제 예상 총비용": "Recommended plan estimated total",
+  "추천 요금제": "Recommended plan"
 }

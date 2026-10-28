@@ -2,6 +2,7 @@ import { useI18n } from '../i18n/hooks';
 import React, { useState, useEffect } from 'react';
 import { getUserSubscriptions, deleteSubscription } from '../api';
 import { Calendar, CheckCircle2, Clock, ShieldAlert, PlusCircle, Trash2 } from 'lucide-react';
+import { calculateSubscriptionSavings } from './subscriptionSavings';
 
 export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpenUserModal }) {
   const { t } = useI18n();
@@ -112,8 +113,12 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
           const plan = sub.plan || {};
           const telecomName = plan.telecom?.name || t("알뜰폰");
           const discountPrice = Number(plan.discount_price || 0);
-          const normalPrice = plan.normal_price == null ? null : Number(plan.normal_price);
+          const normalPrice = Number(plan.normal_price || discountPrice);
           const notifications = sub.notifications || [];
+          const recommendedPlan = notifications.find((notification) => notification.recommended_plan)?.recommended_plan;
+          // 현재 요금제는 가입 후 지난 개월 수를 반영해 남은 할인 기간만 할인가로 계산한다.
+          const comparison = calculateSubscriptionSavings(sub, recommendedPlan);
+          const savings = comparison?.savings;
 
           return (
             <div key={sub.subscription_id} className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-4">
@@ -163,20 +168,48 @@ export default function SubscriptionPage({ currentUser, onNavigateToRank, onOpen
                   </div>
                   <div className="bg-slate-50 p-2.5 rounded-xl">
                     <span className="text-slate-400 text-[10px] block">{t("할인 만료 후 정상 요금")}</span>
-                    <span className="font-bold text-rose-600 text-sm">{normalPrice == null ? t("미확인") : `${normalPrice.toLocaleString()}${t("원")}`}</span>
+                    <span className="font-bold text-rose-600 text-sm">{normalPrice.toLocaleString()}{t("원")}</span>
                   </div>
                 </div>
 
                 {/* 만료 후 요금 인상 경고문 */}
                 <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between px-1">
                   <span>{plan.discount_months === -1 ? t("평생 할인") : t("할인 종료일: {{date}}", { date: sub.discount_end_date })}</span>
-                  {plan.discount_months !== -1 && normalPrice != null && normalPrice > discountPrice && (
+                  {normalPrice > discountPrice && (
                     <span className="text-rose-500 font-semibold">
                       {t("만료 후 월 {{price}}원 추가 청구", { price: (normalPrice - discountPrice).toLocaleString() })}
                     </span>
                   )}
                 </div>
               </div>
+
+              {comparison && (
+                <div className={`rounded-2xl border p-4 space-y-3 ${savings >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{savings >= 0 ? '💰' : '⚠️'}</span>
+                    <span className="text-sm font-bold text-slate-800">{savings >= 0 ? t("예상 절약 금액") : t("예상 비용 증가")}</span>
+                  </div>
+                  <div className={`text-2xl font-black ${savings >= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    {Math.abs(savings).toLocaleString()}
+                    <span className="ml-1 text-sm font-semibold">{t("원")}</span>
+                  </div>
+                  <p className="text-xs text-slate-600">{t("앞으로 {{months}}개월 기준으로 계산한 예상 금액입니다. 현재 요금제는 이미 지난 할인 기간을 반영합니다.", { months: sub.target_months })}</p>
+                  <div className="border-t border-slate-200/80 pt-3 space-y-2 text-xs">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-600">{t("현재 요금제 예상 총비용")}</span>
+                      <span className="font-bold text-slate-800">{t("{{price}}원", { price: comparison.currentTco.toLocaleString() })}</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-600">{t("추천 요금제 예상 총비용")}</span>
+                      <span className="font-bold text-slate-800">{t("{{price}}원", { price: comparison.recommendedTco.toLocaleString() })}</span>
+                    </div>
+                    <div className="pt-1">
+                      <span className="text-slate-500">{t("추천 요금제")}: </span>
+                      <span className="font-semibold text-slate-800">{recommendedPlan.title}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-between gap-3 text-xs">
                 <span className="text-slate-500">{t("유지기간 {{months}}개월", { months: sub.target_months })}</span>
