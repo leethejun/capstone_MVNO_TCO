@@ -22,3 +22,8 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Two overlapping native range inputs share a single visual track. */
+.price-range-input { pointer-events:none; appearance:none; -webkit-appearance:none; background:transparent; height:32px; margin:0; }
+.price-range-input::-webkit-slider-thumb { pointer-events:auto; -webkit-appearance:none; appearance:none; width:21px; height:21px; border-radius:50%; background:#fff; border:3px solid #4f46e5; box-shadow:0 1px 4px #0002; cursor:grab; }
+.price-range-input::-moz-range-thumb { pointer-events:auto; width:17px; height:17px; border-radius:50%; background:#fff; border:3px solid #4f46e5; cursor:grab; }

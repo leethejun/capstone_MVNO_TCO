@@ -7,6 +7,7 @@ import SubscribeModal from './components/SubscribeModal';
 import ComparePlanModal from './components/ComparePlanModal';
 import AdminPage from './pages/AdminPage';
 import RankPage from './pages/RankPage';
+import SearchPage from './pages/SearchPage';
 import SubscriptionPage from './pages/SubscriptionPage';
 import NotificationPage from './pages/NotificationPage';
 import { getMe } from './api';
@@ -63,6 +64,8 @@ export default function App() {
               onSelectPlanForSubscribe={(plan) => setSelectedPlanForCompare(plan)}
             />
           )}
+
+          {activeTab === 'search' && <SearchPage onSelectPlanForSubscribe={(plan) => setSelectedPlanForCompare(plan)} />}
 
           {activeTab === 'subscription' && (
             <SubscriptionPage

@@ -47,6 +47,66 @@ def get_tco_ranked_plans(
     ranked = rank_plans_by_tco(plans, target_months=target_months)
     return ranked[:limit]
 
+
+@router.get("/search", response_model=List[PlanRankItem], summary="요금제명 및 조건 검색")
+def search_plans(
+    mode: str = Query("name", pattern="^(name|conditions)$"),
+    keyword: str = Query("", max_length=100),
+    carrier: str = Query("", max_length=50),
+    min_price: int = Query(0, ge=0),
+    max_price: int = Query(100000, ge=0),
+    network_type: str = Query(""),
+    min_data_gb: float = Query(0, ge=0),
+    min_daily_data_gb: float = Query(0, ge=0),
+    min_qos_speed_mbps: float = Query(0, ge=0),
+    min_voice_minutes: int = Query(0, ge=0),
+    min_sms_count: int = Query(0, ge=0),
+    unlimited_voice: bool = False,
+    unlimited_sms: bool = False,
+    min_discount_months: int = Query(0, ge=0),
+    permanent_discount: bool = False,
+    target_months: int = Query(12, ge=1, le=48),
+    sort: str = Query("tco", pattern="^(tco|price)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    if min_price > max_price:
+        raise HTTPException(status_code=422, detail="최소 금액은 최대 금액 이하여야 합니다.")
+    query = db.query(Plan).options(joinedload(Plan.telecom)).filter(Plan.is_active == True)
+    if mode == "name":
+        if not keyword.strip():
+            return []
+        query = query.filter(Plan.title.ilike(f"%{keyword.strip()}%"))
+    else:
+        if carrier.strip():
+            query = query.join(Plan.telecom).filter(Telecom.name.ilike(f"%{carrier.strip()}%"))
+        query = query.filter(Plan.discount_price >= min_price, Plan.discount_price <= max_price)
+        if network_type in ("LTE", "5G"):
+            query = query.filter(Plan.network_type.ilike(f"%{network_type}%"))
+        if min_data_gb:
+            query = query.filter(Plan.base_data_gb >= min_data_gb)
+        if min_daily_data_gb:
+            query = query.filter(Plan.daily_data_gb >= min_daily_data_gb)
+        if min_qos_speed_mbps:
+            query = query.filter(Plan.qos_speed_mbps >= min_qos_speed_mbps)
+        if unlimited_voice:
+            query = query.filter(Plan.voice_minutes == -1)
+        elif min_voice_minutes:
+            query = query.filter((Plan.voice_minutes >= min_voice_minutes) | (Plan.voice_minutes == -1))
+        if unlimited_sms:
+            query = query.filter(Plan.sms_count == -1)
+        elif min_sms_count:
+            query = query.filter((Plan.sms_count >= min_sms_count) | (Plan.sms_count == -1))
+        if permanent_discount:
+            query = query.filter(Plan.discount_months == -1)
+        elif min_discount_months:
+            query = query.filter((Plan.discount_months >= min_discount_months) | (Plan.discount_months == -1))
+    ranked = rank_plans_by_tco(query.all(), target_months=target_months)
+    if mode == "conditions" and sort == "price":
+        ranked.sort(key=lambda p: (p.discount_price, p.tco))
+    return ranked[offset:offset + limit]
+
 @router.get("/telecoms", response_model=List[TelecomResponse], summary="등록된 통신사 목록 조회")
 def get_telecoms(db: Session = Depends(get_db)):
     return db.query(Telecom).all()

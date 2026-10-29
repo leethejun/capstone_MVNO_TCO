@@ -103,3 +103,13 @@ async function crawlerAdminRequest(path, method = 'GET') {
 }
 export const getCrawlerRunState = () => crawlerAdminRequest('run-status');
 export const startCrawlerRefresh = () => crawlerAdminRequest('run', 'POST');
+
+export async function searchPlans(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+  });
+  const response = await fetch(`${API_BASE}/plans/search?${query.toString()}`);
+  if (!response.ok) throw new Error('요금제 검색에 실패했습니다.');
+  return response.json();
+}
