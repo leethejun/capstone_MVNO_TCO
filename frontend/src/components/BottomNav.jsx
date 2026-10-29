@@ -1,17 +1,18 @@
 import { useI18n } from '../i18n/hooks';
 import React from 'react';
-import { Search, CalendarCheck, BellRing } from 'lucide-react';
+import { Search, CalendarCheck, BellRing, ListOrdered } from 'lucide-react';
 
 export default function BottomNav({ activeTab, setActiveTab, unreadNotifCount = 0 }) {
   const { t } = useI18n();
   const tabs = [
-    { id: 'rank', label: t("요금제 랭킹"), icon: Search },
+    { id: 'rank', label: t("요금제 랭킹"), icon: ListOrdered },
+    { id: 'search', label: '요금제 검색', icon: Search },
     { id: 'subscription', label: t("내 요금제"), icon: CalendarCheck },
     { id: 'notification', label: t("환승 알림"), icon: BellRing, badge: unreadNotifCount },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-slate-200 px-6 py-2 flex justify-around shadow-lg">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-2 flex justify-around shadow-lg">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeTab === tab.id;
