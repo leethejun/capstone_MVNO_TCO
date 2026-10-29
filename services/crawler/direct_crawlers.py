@@ -175,6 +175,27 @@ class DirectTelecomCrawler(BaseCrawler):
         if not home_url or not home_url.startswith("http"):
             return plans
 
+        if telecom_name == '찬스모바일' or 'chancemobile.co.kr' in home_url:
+            from services.crawler.chancemobile_crawler import ChanceMobileCrawler
+            crawler = ChanceMobileCrawler()
+            records = crawler.fetch_raw_plans()
+            if crawler.skipped:
+                self._official_errors[telecom_name] = f'공식 API 가격/기간 검증 제외 {len(crawler.skipped)}건: ' + ', '.join(crawler.skipped[:5])
+            return records
+
+        # 이지모바일 공식 AJAX 전용 크롤러 (기존 패치 유지)
+        if telecom_name == '이지모바일' or 'egmobile.co.kr' in home_url:
+            from services.crawler.egmobile_crawler import EgmobileCrawler
+            crawler = EgmobileCrawler()
+            records = crawler.fetch_raw_plans()
+            if crawler.skipped:
+                self.failed_telecom_names.add(telecom_name)
+                self._official_errors[telecom_name] = (
+                    f'공식몰 가격/기간 검증 제외 {len(crawler.skipped)}건: '
+                    + ', '.join(crawler.skipped[:8])
+                )
+            return records
+
         from services.crawler.menu_catalog import MenuCatalogCrawler, URLS
         if telecom_name in URLS:
             crawler = MenuCatalogCrawler(telecom_name)
@@ -205,13 +226,23 @@ class DirectTelecomCrawler(BaseCrawler):
         from services.crawler.eyagi_crawler import EyagiCrawler
         from services.crawler.large_carriers import UplusCrawler, HelloCrawler
         from services.crawler.dream_crawler import DreamCrawler
-        dedicated={'드림라인 모바일':DreamCrawler,'U+유모바일':UplusCrawler,'헬로모바일':HelloCrawler,'이야기모바일':EyagiCrawler,'KT M모바일':KtmCrawler,'A모바일(에넥스텔레콤)':AMobileCrawler,'토스모바일':TossCrawler,'KT스카이라이프':SkylifeCrawler,'스마텔':SmartelCrawler,'위너스텔(WELL)':WellCrawler,'KB리브모바일':KbCrawler,'핀다이렉트':PinCrawler,'알비레오':AlbireoCrawler,'MONA':MonaCrawler,'GME모바일':GmeCrawler,'이음모바일':EumCrawler,'에르엘':ErelCrawler,'에스원 안심모바일':S1Crawler,'플래시모바일':FlashCrawler,'한국E텔레콤':KoretelCrawler,'우리WON모바일':WonCrawler,'쉐이크모바일':ShakeCrawler}
+        from services.crawler.coinshot_crawler import CoinshotCrawler
+        dedicated={'코인샷 모바일':CoinshotCrawler,'드림라인 모바일':DreamCrawler,'U+유모바일':UplusCrawler,'헬로모바일':HelloCrawler,'이야기모바일':EyagiCrawler,'KT M모바일':KtmCrawler,'A모바일(에넥스텔레콤)':AMobileCrawler,'토스모바일':TossCrawler,'KT스카이라이프':SkylifeCrawler,'스마텔':SmartelCrawler,'위너스텔(WELL)':WellCrawler,'KB리브모바일':KbCrawler,'핀다이렉트':PinCrawler,'알비레오':AlbireoCrawler,'MONA':MonaCrawler,'GME모바일':GmeCrawler,'이음모바일':EumCrawler,'에르엘':ErelCrawler,'에스원 안심모바일':S1Crawler,'플래시모바일':FlashCrawler,'한국E텔레콤':KoretelCrawler,'우리WON모바일':WonCrawler,'쉐이크모바일':ShakeCrawler}
         if telecom_name in dedicated:
             crawler=dedicated[telecom_name]()
             records=crawler.fetch_raw_plans()
             if getattr(crawler,'skipped',[]):
-                self.failed_telecom_names.add(telecom_name)
-                self._official_errors[telecom_name]=f'공식 가격 기간 확인 불가 {len(crawler.skipped)}건 제외: '+', '.join(crawler.skipped)
+                if telecom_name == '에르엘' and records:
+                    # 공식 API에 존재하지만 공식몰에서 가입 가능 여부와 가격/기간을 검증할 수 없는 상품
+                    self.failed_telecom_names.add(telecom_name)
+                    self._official_errors[telecom_name] = (
+                        f'공식 API에서 확인되었으나 공식몰 사이트에서 가입 가능 여부를 '
+                        f'확인하지 못한 요금제 {len(crawler.skipped)}건 제외 '
+                        f'(할인기간 정보 미제공): ' + ', '.join(crawler.skipped)
+                    )
+                else:
+                    self.failed_telecom_names.add(telecom_name)
+                    self._official_errors[telecom_name]=f'공식 가격 기간 확인 불가 {len(crawler.skipped)}건 제외: '+', '.join(crawler.skipped)
             return records
         clean_name = telecom_name.replace(" ", "")
         if 'theonem.co.kr' in home_url:
