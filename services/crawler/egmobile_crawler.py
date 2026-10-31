@@ -10,29 +10,37 @@ class EgmobileCrawler:
     LIFETIME_NAMES = (
         'EG 데이터 300MB',
         'EG 5G평생 2.5GB',
-        'EGK LTE 시니어A',
-        'EG 스마트디바이스10G',
-        'EG 스마트디바이스20G',
     )
 
     def __init__(self):
         self.skipped = []
+        self.excluded = []
+
+    @staticmethod
+    def exclusion_reason(name):
+        compact = re.sub(r'\s+', '', name)
+        if '데이터쉐어링' in compact:
+            return '독립 요금제가 아닌 데이터 쉐어링 서비스'
+        if any(word in compact for word in ('복지', '시니어', '청소년', '주니어', '키즈')):
+            return '가입 자격 제한 요금제'
+        if any(word in compact for word in ('스마트디바이스', '태블릿', '워치')):
+            return '스마트폰용이 아닌 전용 기기 요금제'
+        return None
 
     @staticmethod
     def parse(item):
         name = str(item['name']).strip()
+        if EgmobileCrawler.exclusion_reason(name):
+            return None
         normal = int(str(item['price1']).replace(',', ''))
         current = int(str(item['price2']).replace(',', ''))
         months = int(item['DUTYMONTH'])
         if not name or not item.get('FEECD') or not item.get('seq'):
             raise ValueError('상품명 또는 상품 식별자 누락')
-        if '데이터 쉐어링' in name or '데이터쉐어링' in name:
-            raise ValueError('독립 요금제가 아닌 데이터 쉐어링 서비스')
         if months < 0:
             raise ValueError('할인 기간 값 비정상')
         if current < normal and months == 0:
-            if (name in EgmobileCrawler.LIFETIME_NAMES
-                    or name.startswith('EGK LTE 시니어A(')):
+            if name in EgmobileCrawler.LIFETIME_NAMES:
                 months = -1  # Existing TCO convention: lifetime discount.
             else:
                 raise ValueError('할인 요금이 있으나 할인 기간 미확인')
@@ -60,6 +68,7 @@ class EgmobileCrawler:
 
     def fetch_raw_plans(self):
         self.skipped = []
+        self.excluded = []
         session = requests.Session()
         session.headers.update({
             'User-Agent': 'Mozilla/5.0',
@@ -98,7 +107,11 @@ class EgmobileCrawler:
                 seen.add(code)
                 fresh += 1
                 try:
-                    results.append(self.parse(item))
+                    plan = self.parse(item)
+                    if plan is None:
+                        self.excluded.append({'code': code, 'reason': self.exclusion_reason(str(item['name']))})
+                    else:
+                        results.append(plan)
                 except (ValueError, KeyError, TypeError) as exc:
                     self.skipped.append(f"{item.get('name', code)}: {exc}")
             if len(seen) >= expected_total:

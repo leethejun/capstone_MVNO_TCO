@@ -30,6 +30,9 @@ class ChanceMobileCrawler:
         match = re.fullmatch(r'(\d+)\s*개월', period)
         if match:
             months = int(match.group(1))
+            # 공식 화면의 "N개월 후" 금액은 정가 TT_AMT가 아닌 ORGCHARGE다.
+            # 종료 후 가격이 없으면 정가로 대체하지 않고 검증에서 제외한다.
+            normal = reference
         elif is_lifetime and not period:
             months = -1
         elif not period and current == 0 and reference == 0 and normal is not None and normal > 0:
@@ -72,7 +75,7 @@ class ChanceMobileCrawler:
             'discount_months': months,
             'raw_text': (f'{name} | 데이터 {data} | 통화 {voice} | 문자 {sms} | 망: {network} '
                          f'[출처: 찬스모바일 공식홈페이지] [상품 코드: {code}] '
-                         f'[공식 API 중간가격 ORGCHARGE: {reference}] [할인기간: {period or "할인 없음"}]'),
+                         f'[공식 API ORGCHARGE: {reference}] [할인기간: {period or "할인 없음"}]'),
         }
 
     def fetch_raw_plans(self):
