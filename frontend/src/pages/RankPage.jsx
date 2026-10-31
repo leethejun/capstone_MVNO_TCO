@@ -1,10 +1,13 @@
 import { useI18n } from '../i18n/hooks';
 import React, { useState, useEffect } from 'react';
 import { fetchPlansRank } from '../api';
-import { Filter, Zap, Wifi, Phone, ChevronRight } from 'lucide-react';
+import { useFavorites } from '../use-favorites';
+import RecommendationReasons from '../components/RecommendationReasons';
+import { Filter, Zap, Wifi, Phone, ChevronRight, Star, Lightbulb } from 'lucide-react';
 
-export default function RankPage({ onSelectPlanForSubscribe }) {
+export default function RankPage({ onSelectPlanForSubscribe, currentUser }) {
   const { t } = useI18n();
+  const [view, setView] = useState('rank'); // 'rank' | 'favorites'
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [targetMonths, setTargetMonths] = useState(12);
@@ -13,6 +16,7 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
   const [unlimitedVoice, setUnlimitedVoice] = useState(false);
   const [networkType, setNetworkType] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const favorites = useFavorites({ currentUser, targetMonths });
 
   const loadRank = async () => {
     setLoading(true);
@@ -139,125 +143,241 @@ export default function RankPage({ onSelectPlanForSubscribe }) {
         )}
       </div>
 
-      {/* 랭킹 결과 리스트 */}
-      <div className="space-y-3">
-        <div className="flex justify-between items-center px-1">
-          <span className="text-xs font-bold text-slate-700">{t("TCO 최저가 랭킹")} <span className="text-indigo-600">({t("{{count}}건", { count: plans.length })})</span>
+      {/* 랭킹 / 즐겨찾기 보기 전환 */}
+      <div role="tablist" aria-label={t("요금제 목록 보기")} className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-xl">
+        {[
+          { id: 'rank', label: t("TCO 랭킹") },
+          { id: 'favorites', label: t("즐겨찾기 ({{count}})", { count: favorites.items.length }) },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={view === tab.id}
+            onClick={() => setView(tab.id)}
+            className={`py-1.5 text-xs rounded-lg transition flex items-center justify-center gap-1 ${
+              view === tab.id ? 'bg-white text-indigo-700 font-bold shadow-xs' : 'text-slate-500 font-medium'
+            }`}
+          >
+            {tab.id === 'favorites' && <Star className="w-3 h-3" />}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {favorites.error && <p role="alert" className="text-[11px] text-rose-600 px-1">{t(favorites.error)}</p>}
+
+      {view === 'rank' ? (
+        /* 랭킹 결과 리스트 */
+        <div className="space-y-3">
+          <div className="flex justify-between items-center px-1">
+            <span className="text-xs font-bold text-slate-700">{t("TCO 최저가 랭킹")} <span className="text-indigo-600">({t("{{count}}건", { count: plans.length })})</span>
+            </span>
+            <span className="text-[10px] text-slate-400">{t("조건: TCO 순 정렬")}</span>
+          </div>
+
+          {loading ? (
+            <div className="py-16 text-center text-slate-400 text-xs">
+              <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />{t("TCO 최적 요금제 계산 중...")} </div>
+          ) : plans.length === 0 ? (
+            <div className="py-12 bg-white rounded-2xl border border-slate-200 text-center text-slate-500 text-xs p-6">{t("선택한 조건에 맞는 요금제가 없습니다.")}<br />{t("필터를 조정해보세요.")} </div>
+          ) : (
+            plans.map((p, idx) => (
+              <PlanCard
+                key={p.plan_id || idx}
+                plan={p}
+                rank={idx + 1}
+                targetMonths={targetMonths}
+                onSelect={onSelectPlanForSubscribe}
+                favorite={favorites.isFavorite(p)}
+                onToggleFavorite={favorites.toggle}
+              />
+            ))
+          )}
+        </div>
+      ) : (
+        /* 즐겨찾기 리스트: 선택한 이용 주기의 TCO 순 */
+        <div className="space-y-3">
+          <div className="flex justify-between items-center px-1 gap-2">
+            <span className="text-xs font-bold text-slate-700 shrink-0">{t("즐겨찾기 요금제")}</span>
+            <span className="text-[10px] text-slate-400 text-right">{currentUser ? t("계정에 저장됨") : t("이 브라우저에 저장됨 · 로그인 시 계정으로 이동")}</span>
+          </div>
+          {favorites.loading && favorites.items.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 text-xs">{t("즐겨찾기 불러오는 중...")}</div>
+          ) : favorites.items.length === 0 ? (
+            <div className="py-12 bg-white rounded-2xl border border-slate-200 text-center text-slate-500 text-xs p-6">
+              {t("아직 즐겨찾기한 요금제가 없습니다.")}<br />{t("랭킹 카드의 별 아이콘을 눌러 추가해보세요.")}
+            </div>
+          ) : (
+            favorites.items.map((item) => item.plan ? (
+              <PlanCard
+                key={`${item.telecom_name}|${item.title}|${item.network_type}`}
+                plan={item.plan}
+                targetMonths={targetMonths}
+                onSelect={onSelectPlanForSubscribe}
+                favorite
+                onToggleFavorite={favorites.toggle}
+                notice={item.status === 'replaced' ? t("재수집된 같은 이름의 최신 상품으로 연결했습니다.") : null}
+              />
+            ) : (
+              <div key={`${item.telecom_name}|${item.title}|${item.network_type}`} className="bg-white rounded-2xl border border-dashed border-slate-300 p-4 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-slate-500">{item.telecom_name} · {item.network_type}</p>
+                  <p className="font-bold text-sm text-slate-700 break-words">{item.title}</p>
+                  <p className="mt-1 text-[11px] text-amber-700">
+                    {item.status === 'not_computable'
+                      ? t("할인 종료 후 정상가가 확인되지 않아 {{months}}개월 총비용을 계산할 수 없습니다.", { months: targetMonths })
+                      : t("현재 판매 중인 상품을 찾을 수 없습니다.")}
+                  </p>
+                </div>
+                <FavoriteButton active onClick={() => favorites.toggle(item)} />
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FavoriteButton({ active, onClick }) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={active ? t("즐겨찾기 해제") : t("즐겨찾기 추가")}
+      title={active ? t("즐겨찾기 해제") : t("즐겨찾기 추가")}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      className={`p-1.5 -m-1 rounded-full transition shrink-0 ${active ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}
+    >
+      <Star className="w-4 h-4" fill={active ? 'currentColor' : 'none'} />
+    </button>
+  );
+}
+
+function PlanCard({ plan: p, rank, targetMonths, onSelect, favorite, onToggleFavorite, notice }) {
+  const { t } = useI18n();
+  const [showReasons, setShowReasons] = useState(false);
+  const telecomName = p.telecom?.name || p.telecom_name || t("알뜰폰");
+  const discountPrice = Number(p.discount_price || 0);
+  const normalPrice = p.normal_price == null ? null : Number(p.normal_price);
+  const tco = Number(p.tco ?? 0);
+  const monthlyAvg = Number(p.monthly_avg_price ?? (targetMonths > 0 ? Math.round(tco / targetMonths) : discountPrice));
+  const hasReasons = Array.isArray(p.reasons) && p.reasons.length > 0;
+
+  return (
+    <div
+      onClick={() => onSelect({ ...p, telecom_name: telecomName, target_months: targetMonths })}
+      className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs hover:border-indigo-300 hover:shadow-md transition cursor-pointer relative group"
+    >
+      {/* 랭킹 뱃지 & 통신사 */}
+      <div className="flex flex-wrap gap-2 items-center justify-between mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {rank && (
+            <span
+              className={`text-xs font-black px-2 py-0.5 rounded-lg ${
+                rank === 1
+                  ? 'bg-amber-400 text-amber-950 shadow-xs'
+                  : rank === 2
+                  ? 'bg-slate-200 text-slate-800'
+                  : rank === 3
+                  ? 'bg-amber-100 text-amber-800'
+                  : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {t("{{rank}}위", { rank })}
+            </span>
+          )}
+          <span className="text-xs font-semibold text-slate-600 truncate max-w-[120px]">{telecomName}</span>
+          <span className="text-[10px] px-1.5 py-0.2 rounded-sm bg-slate-100 text-slate-500 font-medium">
+            {p.network_type || 'LTE'}
           </span>
-          <span className="text-[10px] text-slate-400">{t("조건: TCO 순 정렬")}</span>
         </div>
 
-        {loading ? (
-          <div className="py-16 text-center text-slate-400 text-xs">
-            <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />{t("TCO 최적 요금제 계산 중...")} </div>
-        ) : plans.length === 0 ? (
-          <div className="py-12 bg-white rounded-2xl border border-slate-200 text-center text-slate-500 text-xs p-6">{t("선택한 조건에 맞는 요금제가 없습니다.")}<br />{t("필터를 조정해보세요.")} </div>
-        ) : (
-          plans.map((p, idx) => {
-            const rank = idx + 1;
-            const telecomName = p.telecom?.name || p.telecom_name || t("알뜰폰");
-            const discountPrice = Number(p.discount_price || 0);
-            const normalPrice = p.normal_price == null ? null : Number(p.normal_price);
-            const tco = Number(p.tco ?? 0);
-            const monthlyAvg = Number(p.monthly_avg_price ?? (targetMonths > 0 ? Math.round(tco / targetMonths) : discountPrice));
+        <div className="flex items-center gap-2">
+          {/* QoS 체감 무제한 등급 태그 */}
+          {p.qos_speed_mbps > 0 && (
+            <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <Wifi className="w-2.5 h-2.5" />
+              {t("{{speed}}Mbps 무제한", { speed: p.qos_speed_mbps })}
+            </span>
+          )}
+          <FavoriteButton active={favorite} onClick={() => onToggleFavorite(p)} />
+        </div>
+      </div>
 
-            return (
-              <div
-                key={p.plan_id || idx}
-                onClick={() => onSelectPlanForSubscribe({ ...p, telecom_name: telecomName, target_months: targetMonths })}
-                className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs hover:border-indigo-300 hover:shadow-md transition cursor-pointer relative group"
-              >
-                {/* 랭킹 뱃지 & 통신사 */}
-                <div className="flex flex-wrap gap-2 items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-xs font-black px-2 py-0.5 rounded-lg ${
-                        rank === 1
-                          ? 'bg-amber-400 text-amber-950 shadow-xs'
-                          : rank === 2
-                          ? 'bg-slate-200 text-slate-800'
-                          : rank === 3
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {t("{{rank}}위", { rank })}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-600 truncate max-w-[120px]">{telecomName}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-sm bg-slate-100 text-slate-500 font-medium">
-                      {p.network_type || 'LTE'}
-                    </span>
-                  </div>
+      {notice && <p className="mb-2 text-[10px] text-slate-500 bg-slate-50 rounded-lg px-2 py-1">{notice}</p>}
 
-                  {/* QoS 체감 무제한 등급 태그 */}
-                  {p.qos_speed_mbps > 0 && (
-                    <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Wifi className="w-2.5 h-2.5" />
-                      {t("{{speed}}Mbps 무제한", { speed: p.qos_speed_mbps })}
-                    </span>
-                  )}
-                </div>
+      {/* 요금제 타이틀 */}
+      <h4 className="font-bold text-sm text-slate-900 group-hover:text-indigo-600 transition line-clamp-1 mb-2">
+        {p.title}
+      </h4>
 
-                {/* 요금제 타이틀 */}
-                <h4 className="font-bold text-sm text-slate-900 group-hover:text-indigo-600 transition line-clamp-1 mb-2">
-                  {p.title}
-                </h4>
+      {/* 기본 스펙 */}
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 mb-3 bg-slate-50/80 p-2 rounded-xl">
+        <div className="flex items-center gap-1 font-semibold text-slate-800">
+          <Wifi className="w-3.5 h-3.5 text-indigo-500" />
+          <span>
+            {p.base_data_gb || 0}GB
+            {p.daily_data_gb > 0 && t("+일{{data}}GB", { data: p.daily_data_gb })}
+          </span>
+        </div>
+        <div className="text-slate-300">|</div>
+        <div className="flex items-center gap-1">
+          <Phone className="w-3.5 h-3.5 text-slate-400" />
+          <span>{p.voice_minutes === -1 ? t("통화무제한") : t("{{minutes}}분", { minutes: p.voice_minutes || 0 })}</span>
+        </div>
+        <div className="text-slate-300">|</div>
+        <div>{p.sms_count === -1 ? t("문자 무제한") : t("문자 {{count}}건", { count: p.sms_count || 0 })}</div>
+      </div>
 
-                {/* 기본 스펙 */}
-                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 mb-3 bg-slate-50/80 p-2 rounded-xl">
-                  <div className="flex items-center gap-1 font-semibold text-slate-800">
-                    <Wifi className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>
-                      {p.base_data_gb || 0}GB
-                      {p.daily_data_gb > 0 && t("+일{{data}}GB", { data: p.daily_data_gb })}
-                    </span>
-                  </div>
-                  <div className="text-slate-300">|</div>
-                  <div className="flex items-center gap-1">
-                    <Phone className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{p.voice_minutes === -1 ? t("통화무제한") : t("{{minutes}}분", { minutes: p.voice_minutes || 0 })}</span>
-                  </div>
-                  <div className="text-slate-300">|</div>
-                  <div>{p.sms_count === -1 ? t("문자 무제한") : t("문자 {{count}}건", { count: p.sms_count || 0 })}</div>
-                </div>
+      {/* 가격 정보: 월 할인가, 정상가, TCO 총비용 */}
+      <div className="flex items-end justify-between pt-2 border-t border-slate-100">
+        <div>
+          <span className="text-[11px] text-slate-400">{t("월 할인가 ({{period}})", { period: p.discount_months === -1 ? t("평생 할인") : t("{{months}}개월간", { months: p.discount_months }) })}</span>
+          <div className="text-base font-black text-slate-900 leading-tight">
+            {discountPrice.toLocaleString()}
+            <span className="text-xs font-normal text-slate-500 ml-0.5">{t("원/월")}</span>
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            {p.discount_months > 0 ? t("할인 종료 후 정상가") : t("정상가")}{' '}
+            <span className="font-semibold text-slate-700">
+              {normalPrice == null ? t("미확인") : t("{{price}}원/월", { price: normalPrice.toLocaleString() })}
+            </span>
+          </div>
+        </div>
 
-                {/* 가격 정보: 월 할인가, 정상가, TCO 총비용 */}
-                <div className="flex items-end justify-between pt-2 border-t border-slate-100">
-                  <div>
-                    <span className="text-[11px] text-slate-400">{t("월 할인가 ({{period}})", { period: p.discount_months === -1 ? t("평생 할인") : t("{{months}}개월간", { months: p.discount_months }) })}</span>
-                    <div className="text-base font-black text-slate-900 leading-tight">
-                      {discountPrice.toLocaleString()}
-                      <span className="text-xs font-normal text-slate-500 ml-0.5">{t("원/월")}</span>
-                    </div>
-                    <div className="mt-1 text-[11px] text-slate-500">
-                      {p.discount_months > 0 ? t("할인 종료 후 정상가") : t("정상가")}{' '}
-                      <span className="font-semibold text-slate-700">
-                        {normalPrice == null ? t("미확인") : t("{{price}}원/월", { price: normalPrice.toLocaleString() })}
-                      </span>
-                    </div>
-                  </div>
+        <div className="text-right">
+          <span className="text-[11px] text-indigo-600 font-semibold">{t("{{months}}개월 총비용 (TCO)", { months: targetMonths })}</span>
+          <div className="text-base font-black text-indigo-600 leading-tight">
+            {tco.toLocaleString()}
+            <span className="text-xs font-normal text-slate-500 ml-0.5">{t("원")}</span>
+          </div>
+          <span className="text-[10px] text-slate-400">
+            {t("(월평균 {{price}}원)", { price: monthlyAvg.toLocaleString() })}
+          </span>
+        </div>
+      </div>
 
-                  <div className="text-right">
-                    <span className="text-[11px] text-indigo-600 font-semibold">{t("{{months}}개월 총비용 (TCO)", { months: targetMonths })}</span>
-                    <div className="text-base font-black text-indigo-600 leading-tight">
-                      {tco.toLocaleString()}
-                      <span className="text-xs font-normal text-slate-500 ml-0.5">{t("원")}</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400">
-                      {t("(월평균 {{price}}원)", { price: monthlyAvg.toLocaleString() })}
-                    </span>
-                  </div>
-                </div>
+      {/* 추천 근거 */}
+      {showReasons && hasReasons && <div className="mt-3"><RecommendationReasons reasons={p.reasons} title="이 요금제가 추천된 이유" /></div>}
 
-                {/* 개통 버튼 */}
-                <div className="mt-2.5 pt-2 flex items-center justify-end text-[11px] text-indigo-600 font-semibold gap-0.5 opacity-90">
-                  <span>{t("이 요금제로 개통 등록")}</span>
-                  <ChevronRight className="w-3 h-3" />
-                </div>
-              </div>
-            );
-          })
-        )}
+      {/* 근거 보기 & 개통 버튼 */}
+      <div className="mt-2.5 pt-2 flex items-center justify-between text-[11px] font-semibold gap-0.5">
+        {hasReasons ? (
+          <button
+            type="button"
+            aria-expanded={showReasons}
+            onClick={(e) => { e.stopPropagation(); setShowReasons(!showReasons); }}
+            className="flex items-center gap-1 text-amber-700 hover:text-amber-800"
+          >
+            <Lightbulb className="w-3 h-3" />
+            {showReasons ? t("추천 근거 닫기") : t("왜 추천됐나요?")}
+          </button>
+        ) : <span />}
+        <span className="flex items-center text-indigo-600 opacity-90">
+          {t("이 요금제로 개통 등록")}
+          <ChevronRight className="w-3 h-3" />
+        </span>
       </div>
     </div>
   );

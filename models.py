@@ -128,3 +128,16 @@ class PushDelivery(Base):
     notification_id = Column(Integer, ForeignKey("notifications.notification_id", ondelete="CASCADE"), nullable=False)
     device_id = Column(Integer, ForeignKey("push_devices.device_id", ondelete="CASCADE"), nullable=False)
     delivered_at = Column(DateTime, nullable=True)
+
+
+class FavoritePlan(Base):
+    """사용자 즐겨찾기. 매월 재수집으로 plan_id가 바뀌므로 통신사·요금제명·망으로 다시 연결한다."""
+    __tablename__ = "favorite_plans"
+    __table_args__ = (UniqueConstraint("user_id", "telecom_name", "title", "network_type"),)
+    favorite_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    plan_id = Column(Integer, nullable=True)  # 마지막으로 확인한 상품. 재수집 후 삭제될 수 있어 FK를 두지 않는다.
+    telecom_name = Column(String(50), nullable=False)
+    title = Column(String(100), nullable=False)
+    network_type = Column(String(10), nullable=False, default="LTE")
+    created_at = Column(DateTime, default=datetime.now, nullable=False)

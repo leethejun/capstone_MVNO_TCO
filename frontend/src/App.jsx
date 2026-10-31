@@ -60,6 +60,7 @@ export default function App() {
           {activeTab === "admin" && <AdminPage currentUser={currentUser} />}
           {activeTab === 'rank' && (
             <RankPage
+              currentUser={currentUser}
               onSelectPlanForSubscribe={(plan) => setSelectedPlanForCompare(plan)}
             />
           )}

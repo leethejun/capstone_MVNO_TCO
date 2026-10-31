@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Literal, Optional, List
+from typing import Any, Dict, Literal, Optional, List
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from models import SubscriptionStatus, NoticeType, NotificationStatus
 
@@ -35,6 +35,11 @@ class PlanResponse(PlanBase):
     scraped_at: datetime
     telecom: Optional[TelecomResponse] = None
 
+# 추천 근거: 프론트엔드가 code별 문구로 번역하고 params 값을 채운다.
+class RecommendationReason(BaseModel):
+    code: str
+    params: Dict[str, Any] = {}
+
 class PlanRankItem(PlanResponse):
     target_months: int
     tco: int
@@ -43,6 +48,28 @@ class PlanRankItem(PlanResponse):
     normal_period_months: int
     is_unlimited_data: bool = False
     qos_tier: str = "소진 시 차단/과금형"
+    reasons: List[RecommendationReason] = []
+
+# --- Favorite Schemas ---
+class FavoriteKey(BaseModel):
+    telecom_name: str = Field(min_length=1, max_length=50)
+    title: str = Field(min_length=1, max_length=100)
+    network_type: str = Field("LTE", max_length=10)
+    plan_id: Optional[int] = None
+
+class FavoriteCreate(BaseModel):
+    plan_id: int
+
+class FavoriteResolveRequest(BaseModel):
+    items: List[FavoriteKey] = Field(default_factory=list, max_length=100)
+    target_months: int = Field(12, ge=1, le=48)
+
+class FavoriteItem(FavoriteKey):
+    favorite_id: Optional[int] = None
+    # available: 저장한 상품 그대로 / replaced: 재수집된 같은 이름 상품 / unavailable: 판매 확인 불가
+    # not_computable: 상품은 있으나 선택 기간 TCO 계산 불가(정상가 미확인 등)
+    status: Literal["available", "replaced", "unavailable", "not_computable"]
+    plan: Optional[PlanRankItem] = None
 
 # --- User Schemas ---
 class UserCreate(BaseModel):
@@ -66,6 +93,7 @@ class NotificationResponse(BaseModel):
     notice_type: NoticeType
     recommended_plan_id: Optional[int] = None
     recommended_plan: Optional[PlanResponse] = None
+    recommendation_reasons: List[RecommendationReason] = []
     scheduled_date: date
     sent_at: Optional[datetime] = None
     push_status: str = "NOT_SENT"
