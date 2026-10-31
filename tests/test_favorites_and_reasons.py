@@ -125,6 +125,29 @@ class FavoriteTests(unittest.TestCase):
         item = resolve_favorites(self.db, [self.key("든든 7GB", 10)], 12)[0]
         self.assertEqual((item.status, item.plan_id), ("replaced", 20))
 
+    def test_inactive_favorite_resolves_to_cheapest_current_plan(self):
+        saved = add_favorite(FavoriteCreate(plan_id=10), 12, self.db, self.user)
+        self.db.get(Plan, 10).is_active = False
+        self.db.add_all([make_plan(20, "든든 7GB", 2200, 18700, 7),
+                         make_plan(21, "든든 7GB", 1100, 18700, 7)])
+        self.db.commit()
+        item = list_favorites(12, self.db, self.user)[0]
+        self.assertEqual((item.status, item.plan_id), ("replaced", 21))
+        self.assertEqual(item.favorite_id, saved.favorite_id)
+        delete_favorite(item.favorite_id, self.db, self.user)
+        self.assertEqual(list_favorites(12, self.db, self.user), [])
+
+    def test_favorites_are_isolated_between_users(self):
+        stranger = User(user_id=2, email="b@example.com")
+        self.db.add(stranger)
+        self.db.commit()
+        own = add_favorite(FavoriteCreate(plan_id=10), 12, self.db, self.user)
+        self.assertEqual(list_favorites(12, self.db, stranger), [])
+        other = add_favorite(FavoriteCreate(plan_id=10), 12, self.db, stranger)
+        self.assertNotEqual(own.favorite_id, other.favorite_id)
+        delete_favorite(other.favorite_id, self.db, stranger)
+        self.assertEqual(len(list_favorites(12, self.db, self.user)), 1)
+
     def test_add_is_idempotent_and_delete_is_owner_only(self):
         first = add_favorite(FavoriteCreate(plan_id=10), 12, self.db, self.user)
         second = add_favorite(FavoriteCreate(plan_id=10), 12, self.db, self.user)

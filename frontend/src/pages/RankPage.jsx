@@ -262,7 +262,7 @@ function PlanCard({ plan: p, rank, targetMonths, onSelect, favorite, onToggleFav
   const normalPrice = p.normal_price == null ? null : Number(p.normal_price);
   const tco = Number(p.tco ?? 0);
   const monthlyAvg = Number(p.monthly_avg_price ?? (targetMonths > 0 ? Math.round(tco / targetMonths) : discountPrice));
-  const hasReasons = Array.isArray(p.reasons) && p.reasons.length > 0;
+  const hasReasons = rank === 1 && Array.isArray(p.reasons) && p.reasons.length > 0;
 
   return (
     <div
@@ -359,7 +359,7 @@ function PlanCard({ plan: p, rank, targetMonths, onSelect, favorite, onToggleFav
       </div>
 
       {/* 추천 근거 */}
-      {showReasons && hasReasons && <div className="mt-3"><RecommendationReasons reasons={p.reasons} title="이 요금제가 추천된 이유" /></div>}
+      {showReasons && hasReasons && <div className="mt-3"><RecommendationReasons reasons={p.reasons} title="TCO세부사항" /></div>}
 
       {/* 근거 보기 & 개통 버튼 */}
       <div className="mt-2.5 pt-2 flex items-center justify-between text-[11px] font-semibold gap-0.5">
@@ -371,7 +371,7 @@ function PlanCard({ plan: p, rank, targetMonths, onSelect, favorite, onToggleFav
             className="flex items-center gap-1 text-amber-700 hover:text-amber-800"
           >
             <Lightbulb className="w-3 h-3" />
-            {showReasons ? t("추천 근거 닫기") : t("왜 추천됐나요?")}
+            {showReasons ? t("TCO세부사항 닫기") : t("TCO세부사항")}
           </button>
         ) : <span />}
         <span className="flex items-center text-indigo-600 opacity-90">
