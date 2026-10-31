@@ -1,6 +1,7 @@
 import { useI18n } from '../i18n/hooks';
 import React, { useState, useEffect } from 'react';
 import { getUserSubscriptions } from '../api';
+import RecommendationReasons from '../components/RecommendationReasons';
 import { enablePush, disablePush, refreshPush, watchForegroundPush, sendTestPush } from '../push';
 import { Bell, BellRing, Sparkles, Check } from 'lucide-react';
 
@@ -221,6 +222,9 @@ export default function NotificationPage({ currentUser, onOpenUserModal }) {
                         </span>
                       </div>
                     )}
+
+                    {/* 추천 근거 */}
+                    <RecommendationReasons reasons={notif.recommendation_reasons} title="이 요금제가 추천된 이유" />
                   </div>
                 ) : (
                   <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-500 text-center">

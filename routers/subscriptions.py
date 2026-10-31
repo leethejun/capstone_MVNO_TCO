@@ -7,6 +7,7 @@ from database import get_db
 from models import User, Plan, UserSubscription, Notification, SubscriptionStatus, NoticeType, NotificationStatus
 from schemas import SubscriptionCreate, SubscriptionResponse
 from services.auth import get_current_user
+from services.explain import explain_alternative
 from services.lifecycle import notification_schedule, target_end_date, recommendation_start_date, recommendation_available
 
 router = APIRouter(prefix="/api/subscriptions", tags=["Subscriptions & Notifications"])
@@ -100,6 +101,11 @@ def serialize_subscription(sub):
         for notification in result.notifications:
             notification.recommended_plan_id = None
             notification.recommended_plan = None
+    else:
+        recommended = {n.notification_id: n.recommended_plan for n in sub.notifications}
+        for notification in result.notifications:
+            notification.recommendation_reasons = explain_alternative(
+                sub.plan, recommended.get(notification.notification_id), sub.target_months)
     return result
 
 

@@ -5,6 +5,7 @@ from database import get_db
 from models import Plan, Telecom
 from schemas import PlanResponse, PlanRankItem, TelecomResponse
 from services.tco import rank_plans_by_tco
+from services.explain import explain_ranking
 
 router = APIRouter(prefix="/api/plans", tags=["Plans & TCO Ranking"])
 
@@ -45,6 +46,13 @@ def get_tco_ranked_plans(
 
     plans = query.all()
     ranked = rank_plans_by_tco(plans, target_months=target_months)
+    # 랭킹 카드의 "왜 추천됐나요?" 근거. 사용자가 고른 조건만 근거에 포함한다.
+    filters = {
+        "telecom_id": telecom_id, "min_data_gb": min_data_gb, "min_daily_data_gb": min_daily_data_gb,
+        "min_qos_speed_mbps": min_qos_speed_mbps, "is_unlimited_data": is_unlimited_data,
+        "unlimited_voice": unlimited_voice, "unlimited_sms": unlimited_sms, "network_type": network_type,
+    }
+    explain_ranking(ranked, filters, limit=limit)
     return ranked[:limit]
 
 @router.get("/telecoms", response_model=List[TelecomResponse], summary="등록된 통신사 목록 조회")

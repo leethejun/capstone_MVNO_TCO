@@ -103,3 +103,38 @@ async function crawlerAdminRequest(path, method = 'GET') {
 }
 export const getCrawlerRunState = () => crawlerAdminRequest('run-status');
 export const startCrawlerRefresh = () => crawlerAdminRequest('run', 'POST');
+
+// --- 즐겨찾기: 로그인 계정은 서버에, 비로그인은 브라우저에 저장한 키를 서버에서 현재 상품으로 연결한다.
+export async function fetchFavorites(targetMonths = 12) {
+  const res = await fetch(`${API_BASE}/favorites?target_months=${targetMonths}`, { headers: await authHeaders() });
+  if (!res.ok) throw new Error(t("즐겨찾기 조회 실패"));
+  return res.json();
+}
+
+export async function addFavorite(planId, targetMonths = 12) {
+  const res = await fetch(`${API_BASE}/favorites?target_months=${targetMonths}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...await authHeaders() },
+    body: JSON.stringify({ plan_id: planId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(t(err.detail) || t("즐겨찾기 추가 실패"));
+  }
+  return res.json();
+}
+
+export async function removeFavorite(favoriteId) {
+  const res = await fetch(`${API_BASE}/favorites/${favoriteId}`, { method: "DELETE", headers: await authHeaders() });
+  if (!res.ok && res.status !== 404) throw new Error(t("즐겨찾기 삭제 실패"));
+}
+
+export async function resolveFavorites(items, targetMonths = 12) {
+  const res = await fetch(`${API_BASE}/favorites/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items, target_months: targetMonths }),
+  });
+  if (!res.ok) throw new Error(t("즐겨찾기 조회 실패"));
+  return res.json();
+}
