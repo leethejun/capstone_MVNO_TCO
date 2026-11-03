@@ -50,6 +50,9 @@ export default function AdminPage({ currentUser }) {
       {report.coverage?.map(item => <div key={item.name} className="border-t pt-2">
         <p className="font-medium">{item.name}</p>
         <p>{t('공식몰')}: {item.official_count ?? 0} · {t('허브')}: {item.hub_count ?? 0}</p>
+        <p>{t('활성 요금제')}: {item.active_plan_count ?? '—'}</p>
+        {item.refreshed_at && <p>{t('최근 수집')}: {date(item.refreshed_at)}</p>}
+        {item.exclusion_summary && <p className="text-slate-600">{item.exclusion_summary}</p>}
         {item.error && <p className="text-rose-600 break-words">{item.error}</p>}
       </div>)}
     </div>}

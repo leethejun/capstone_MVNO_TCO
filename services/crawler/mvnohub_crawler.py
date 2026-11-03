@@ -159,7 +159,7 @@ class MvnohubCrawler(BaseCrawler):
         self.complete = max_pages == 0 and page >= total_pages and not self.errors
         # _product_id 필드 제거 (내부 용도)
         for plan in results:
-            plan.pop("_product_id", None)
+            plan['_hub_product_id'] = plan.pop("_product_id", None)
 
         print(f"[MvnohubCrawler] ✅ 전수 크롤링 완료: 총 {len(results)}건 (중복 제거), "
               f"{len(seen_product_ids)}개 고유 상품ID, {page}페이지 수집")
@@ -323,5 +323,5 @@ class MvnohubCrawler(BaseCrawler):
             "discount_price": discount_price,
             "normal_price": normal_price,
             "discount_months": discount_months,
-            "raw_text": f"{raw_text} [출처: 알뜰폰허브]"
+            "raw_text": f"{raw_text} [출처: 알뜰폰허브] [허브 상품 ID: {product_id}]"
         }

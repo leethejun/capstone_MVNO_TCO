@@ -34,6 +34,7 @@ class DirectTelecomCrawler(BaseCrawler):
         self.failed_telecom_names = set()
         self.coverage = []
         self._official_errors = {}
+        self._official_metadata = {}
         self._detail_price_cache: Dict[str, Optional[int]] = {}
 
     def fetch_raw_plans(self) -> List[Dict[str, Any]]:
@@ -47,6 +48,7 @@ class DirectTelecomCrawler(BaseCrawler):
         # Step 1: 알뜰폰허브에서 모든 입점 사업자 목록과 공식 홈페이지 URL 수집
         self.failed_telecom_names.clear()
         self._official_errors.clear()
+        self._official_metadata.clear()
         self.coverage = []
         brands = self.merge_brands(self.discover_all_mvno_brands())
         print(f"[DirectTelecomCrawler] 허브 + 마스터 수집 대상: {len(brands)}개")
@@ -86,8 +88,13 @@ class DirectTelecomCrawler(BaseCrawler):
                     added_official += 1
 
             # 2-B: 허브 내 브랜드 전용 요금제 페이지 크롤링
-            if brand_plan_url:
-                hub_brand_plans = self._crawl_brand_hub_page(name, brand_plan_url)
+            hub_urls = brand.get('brand_plan_urls') or ([brand_plan_url] if brand_plan_url else [])
+            if not hub_urls and name == '모빙':
+                hub_urls = ['https://www.mvnohub.kr/brand/plan/11.do']
+            if hub_urls:
+                hub_brand_plans = []
+                for hub_url in hub_urls:
+                    hub_brand_plans.extend(self._crawl_brand_hub_page(name, hub_url))
                 added_hub = 0
                 for p in hub_brand_plans:
                     key = (p["telecom_name"], p["title"], p.get("network_type"), p.get("discount_price"), p.get("normal_price"), p.get("discount_months"), p.get("raw_text"))
@@ -100,7 +107,16 @@ class DirectTelecomCrawler(BaseCrawler):
                                   'official_count': len(official_plans), 'hub_count': added_hub,
                                   'status': 'collected' if official_plans and name not in self.failed_telecom_names else 'needs_attention',
                                   'error': error or self._official_errors.get(name)})
-            print(f"[DirectTelecomCrawler] '{name}' 수집 완료 (공식몰: {added_official}건, 브랜드특가: {added_hub if brand_plan_url else 0}건)")
+            self.coverage[-1].update(self._official_metadata.get(name, {}))
+            if self.coverage[-1].get('hub_complete') is False:
+                self.coverage[-1].update(status='needs_attention', error=(
+                    '허브 전체 수집 실패: ' + self.coverage[-1].get('hub_error', '전체 목록 검증 실패')))
+            if self.coverage[-1].get('hub_complete') and added_hub and not official_plans:
+                self.coverage[-1].update(
+                    status='hub_fallback', official_error=error or self._official_errors.get(name),
+                    error=f'공식몰 연결 실패 · 알뜰폰허브 전체 {added_hub}개 수집 완료')
+                self.failed_telecom_names.discard(name)
+            print(f"[DirectTelecomCrawler] '{name}' 수집 완료 (공식몰: {added_official}건, 허브 전체: {added_hub}건)")
 
             if self.delay_sec > 0:
                 time.sleep(self.delay_sec)
@@ -110,23 +126,36 @@ class DirectTelecomCrawler(BaseCrawler):
 
     @staticmethod
     def merge_brands(hub_brands):
-        """목록 누락과 허브 장애에 무관하게 모든 마스터를 방문한다."""
+        """별칭을 정규화하고 같은 브랜드의 모든 망별 브랜드관 URL을 보존한다."""
+        from services.crawler.hub_brand_crawler import HUB_BRAND_IDS
         def host(url):
-            return urlparse(url or '').netloc.lower().removeprefix('www.')
-        def name(value):
-            return re.sub(r'\s+', '', canonical_telecom_name(value)).lower()
-        result = [dict(brand) for brand in hub_brands]
+            return (urlparse(url or '').hostname or '').lower().removeprefix('www.')
+        def key(name):
+            return re.sub(r'\s+', '', canonical_telecom_name(name)).lower()
+        rows = [dict(brand) for brand in hub_brands]
         for carrier in MASTER_TELECOMS:
-            match = next((brand for brand in result
-                          if name(brand['name']) == name(carrier['name']) or
-                          (host(brand.get('home_url')) and host(brand.get('home_url')) == host(carrier['website_url']))), None)
-            if match:
-                match['name'] = carrier['name']
-                match['home_url'] = match.get('home_url') or carrier['website_url']
+            matches = [brand for brand in rows if key(brand['name']) == key(carrier['name']) or
+                       (host(brand.get('home_url')) and host(brand.get('home_url')) == host(carrier['website_url']))]
+            if matches:
+                for match in matches:
+                    match['name'] = carrier['name']
+                    match['home_url'] = match.get('home_url') or carrier['website_url']
             else:
-                result.append({'name': carrier['name'], 'home_url': carrier['website_url'],
-                               'brand_plan_url': '', 'network': carrier['network']})
-        return [brand for brand in result if not is_excluded_telecom(brand["name"], brand.get("home_url", ""))]
+                rows.append(dict(name=carrier['name'], home_url=carrier['website_url'],
+                                 brand_plan_url='', network=carrier['network']))
+        merged = {}
+        for row in rows:
+            name = canonical_telecom_name(row['name'])
+            if is_excluded_telecom(name, row.get('home_url','')):
+                continue
+            target = merged.setdefault(name, dict(row, name=name, brand_plan_urls=[]))
+            urls = row.get('brand_plan_urls',[]) + ([row['brand_plan_url']] if row.get('brand_plan_url') else [])
+            urls += [f'https://www.mvnohub.kr/brand/plan/{value}.do' for value in HUB_BRAND_IDS.get(name,())]
+            for url in urls:
+                if url not in target['brand_plan_urls']:
+                    target['brand_plan_urls'].append(url)
+            target['brand_plan_url'] = next(iter(target['brand_plan_urls']), '')
+        return list(merged.values())
 
     def discover_all_mvno_brands(self) -> List[Dict[str, str]]:
         """알뜰폰허브 brand.do를 크롤링하여 전체 사업자 목록 및 공식 홈페이지 추출"""
@@ -174,6 +203,30 @@ class DirectTelecomCrawler(BaseCrawler):
             return plans
         if not home_url or not home_url.startswith("http"):
             return plans
+
+        if canonical_telecom_name(telecom_name) == '티플러스':
+            from services.crawler.tplus_crawler import TplusCrawler
+            crawler = TplusCrawler()
+            records = crawler.fetch_raw_plans()
+            self._capture_metadata(telecom_name, crawler)
+            if crawler.skipped:
+                self.failed_telecom_names.add(telecom_name)
+                self._official_errors[telecom_name] = (
+                    f'티플러스 공식 가격/기간 검증 제외 {len(crawler.skipped)}건: '
+                    + ', '.join(crawler.skipped[:8]))
+            return records
+
+        if canonical_telecom_name(telecom_name) == '아시아모바일':
+            from services.crawler.asia_crawler import AsiaCrawler
+            crawler = AsiaCrawler()
+            records = crawler.fetch_raw_plans()
+            self._capture_metadata(telecom_name, crawler)
+            if crawler.skipped:
+                self.failed_telecom_names.add(telecom_name)
+                self._official_errors[telecom_name] = (
+                    f'아시아모바일 공식 가격/기간 검증 제외 {len(crawler.skipped)}건: '
+                    + ', '.join(crawler.skipped[:8]))
+            return records
 
         if telecom_name == '찬스모바일' or 'chancemobile.co.kr' in home_url:
             from services.crawler.chancemobile_crawler import ChanceMobileCrawler
@@ -231,6 +284,7 @@ class DirectTelecomCrawler(BaseCrawler):
         if telecom_name in dedicated:
             crawler=dedicated[telecom_name]()
             records=crawler.fetch_raw_plans()
+            self._capture_metadata(telecom_name, crawler)
             if getattr(crawler,'skipped',[]):
                 if telecom_name == '에르엘' and records:
                     # 공식 API에 존재하지만 공식몰에서 가입 가능 여부와 가격/기간을 검증할 수 없는 상품
@@ -326,6 +380,23 @@ class DirectTelecomCrawler(BaseCrawler):
             print(f"[DirectTelecomCrawler] '{telecom_name}' 공식몰({home_url}) 크롤링 중 오류: {e}")
 
         return plans
+
+    def _capture_metadata(self, name, crawler):
+        excluded = getattr(crawler, 'excluded', [])
+        if not isinstance(excluded, list):
+            excluded = []
+        metadata = {'official_excluded': len(excluded)}
+        if isinstance(getattr(crawler, 'total', None), int):
+            metadata['official_total'] = crawler.total
+        if excluded:
+            if name == '우리WON모바일':
+                financial = sum(value.endswith('(금융상품 조건)') for value in excluded)
+                metadata['exclusion_summary'] = (
+                    f'검토 {getattr(crawler, "total", "미확인")}개 · 금융 조건 {financial}개 제외 · '
+                    f'가입 대상 및 추가 혜택 조건 {len(excluded) - financial}개 제외')
+            else:
+                metadata['exclusion_summary'] = f'가입 조건 및 상품 유형에 따라 {len(excluded)}개 제외'
+        self._official_metadata[name] = metadata
 
     def _fetch_normal_price_from_detail(self, detail_url: str) -> Optional[int]:
         """카드에 정상가가 누락된 경우 상세 페이지에서 'N개월 이후 XX원' 또는 정상가 추출"""
@@ -628,123 +699,40 @@ class DirectTelecomCrawler(BaseCrawler):
         return plans
 
     def _crawl_mobing_direct(self, telecom_name: str, home_url: str) -> List[Dict[str, Any]]:
-        """유니컴즈(모빙) 공식몰 직접 크롤링"""
-        plans = []
+        """모빙의 현재 공식 목록을 조회하고 실패 원인을 관리자에게 남긴다."""
+        url = "https://www.mobing.co.kr/product/plan"
         try:
-            url = "https://www.mobing.co.kr/plan/list"
-            resp = requests.get(url, headers=self.HEADERS, timeout=10)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                cards = soup.select(".plan-box, .plan_box, .plan-item, li[class*='plan']")
-                for card in cards:
-                    txt = re.sub(r"\s+", " ", card.get_text(" ", strip=True)).strip()
-                    title_el = card.select_one(".tit, strong, h3, .name")
-                    if title_el:
-                        title = title_el.get_text(strip=True)
-                        # 가격 전용 요소가 없는 카드는 수집하지 않는다.
-                        price_el = card.select_one(".price, .fee, .pay, .money, .cost")
-                        if price_el is None:
-                            continue
-                        prices = re.findall(r'(?<![\d.,])(\d[\d,]*)(?![\d.,])\s*원', price_el.get_text(" ", strip=True))
-                        if not prices:
-                            continue
-                        amounts = [int(value.replace(",", "")) for value in prices]
-                        plans.append({
-                            "telecom_name": "유니컴즈",
-                            "title": f"[공식몰] {title}",
-                            "network_type": "5G" if "5G" in title.upper() else "LTE",
-                            "discount_price": min(amounts),
-                            "normal_price": max(amounts),
-                            "discount_months": 12,
-                            "raw_text": f"[공식몰] {title} | {txt} [출처: 모빙 공식홈페이지]"
-                        })
-        except Exception as e:
-            print(f"[DirectTelecomCrawler] 모빙 수집 오류: {e}")
-
-        return plans
+            response = requests.get(url, headers=self.HEADERS, timeout=max(self.timeout, 20))
+            response.raise_for_status()
+            records = self._extract_plans_from_html(
+                '모빙', BeautifulSoup(response.content, 'html.parser'), url, '')
+            if not records:
+                raise ValueError('현재 공식 목록의 검증 가능한 카드/API를 확인하지 못함')
+            return records
+        except Exception as exc:
+            self.failed_telecom_names.add('모빙')
+            self._official_errors['모빙'] = f'모빙 공식 목록 {url} 수집 실패: {exc}'
+            return []
 
     def _crawl_brand_hub_page(self, telecom_name: str, brand_plan_url: str) -> List[Dict[str, Any]]:
-        """알뜰폰허브 내 브랜드 전용 요금제 페이지(/brand/plan/{id}.do) 크롤링"""
-        plans = []
+        """모든 브랜드관은 동일한 전체 페이지 및 상세 검증 경로를 사용한다."""
+        from services.crawler.hub_brand_crawler import HubBrandCrawler
+        from services.crawler.mobing_hub_crawler import MobingHubCrawler
+        crawler = (MobingHubCrawler(timeout=max(self.timeout,25)) if telecom_name == '모빙'
+                   else HubBrandCrawler(telecom_name, brand_plan_url, timeout=max(self.timeout,25)))
+        metadata = self._official_metadata.setdefault(telecom_name, {})
+        branches = metadata.setdefault('hub_brands', [])
+        row = dict(url=brand_plan_url)
         try:
-            resp = requests.get(brand_plan_url, headers=self.HEADERS, timeout=self.timeout)
-            if resp.status_code != 200:
-                self._official_errors[telecom_name] = f'HTTP {resp.status_code}'
-                return plans
-
-            soup = BeautifulSoup(resp.text, "html.parser")
-            cards = soup.select(".plan_card")
-
-            for card in cards:
-                tit_tag = card.select_one("p.tit")
-                if not tit_tag:
-                    continue
-                title = re.sub(r"\s+", " ", tit_tag.get("title") or tit_tag.get_text()).strip()
-
-                posi_lis = card.select(".posi ul li")
-                network_carrier = posi_lis[0].get_text(strip=True) if len(posi_lis) > 0 else "기타"
-                brand_name = posi_lis[1].get_text(strip=True) if len(posi_lis) > 1 else telecom_name
-
-                network_type = "5G" if "5G" in title.upper() else "LTE"
-
-                now_price_tag = card.select_one(".price p.now span")
-                price_digits = re.sub(r"[^\d]", "", now_price_tag.get_text()) if now_price_tag else ""
-                if not price_digits:
-                    continue
-                discount_price = int(price_digits)
-
-                normal_price = discount_price
-                after_price_tag = card.select_one(".time_after span")
-                ex_price_tag = card.select_one(".price p.ex span")
-                if after_price_tag:
-                    digits = re.sub(r"[^\d]", "", after_price_tag.get_text())
-                    if digits:
-                        normal_price = int(digits)
-                elif ex_price_tag:
-                    digits = re.sub(r"[^\d]", "", ex_price_tag.get_text())
-                    if digits:
-                        normal_price = int(digits)
-
-                discount_months = 12
-                # 할인 기간 파싱 전: 가격 동일시 lifetime deal (-1) 감지
-                if normal_price == discount_price:
-                    discount_months = -1  # Lifetime discount
-                else:
-                    discount_months = 12
-                time_after_tag = card.select_one(".time_after")
-                if time_after_tag:
-                    m = re.search(r"(\d+)\s*개월", time_after_tag.get_text())
-                    if m:
-                        discount_months = int(m.group(1))
-
-                lifetime = MvnohubCrawler.lifetime_prices(card, discount_price)
-                if lifetime:
-                    normal_price, discount_months = lifetime
-                data_after = card.get("data-data-after", "")
-                spec_parts = [title]
-                for cls in ["wifi", "call", "mes", "book"]:
-                    li = card.select_one(f".dtl li.{cls}")
-                    if li:
-                        t = re.sub(r"\s+", " ", li.get_text()).strip()
-                        if t:
-                            spec_parts.append(t)
-                if data_after and data_after not in ("0", ""):
-                    spec_parts.append(f"소진후 {data_after}")
-                spec_parts.append(f"망: {network_carrier}")
-
-                raw_text = " | ".join(spec_parts) + f" [출처: {brand_name} 브랜드전용관]"
-
-                plans.append({
-                    "telecom_name": brand_name,
-                    "title": f"[브랜드특가] {title}",
-                    "network_type": network_type,
-                    "discount_price": discount_price,
-                    "normal_price": normal_price,
-                    "discount_months": discount_months,
-                    "raw_text": raw_text
-                })
-
-        except Exception as e:
-            print(f"[DirectTelecomCrawler] '{telecom_name}' 브랜드 요금제 페이지 크롤링 오류: {e}")
-
-        return plans
+            records = crawler.fetch_raw_plans()
+            row.update(complete=crawler.complete,total=crawler.total,pages=crawler.pages,collected=len(records))
+        except Exception as exc:
+            records = []
+            row.update(complete=False,total=crawler.total,pages=crawler.pages,error=str(exc))
+            metadata['hub_error'] = str(exc)
+            self.failed_telecom_names.add(telecom_name)
+        branches.append(row)
+        metadata.update(hub_complete=all(row['complete'] for row in branches),
+                        hub_total=sum(row['total'] for row in branches),
+                        hub_pages=sum(row['pages'] for row in branches))
+        return records

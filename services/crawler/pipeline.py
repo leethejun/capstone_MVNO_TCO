@@ -70,7 +70,13 @@ def run_comprehensive_crawler_pipeline(
             failed_telecom_names = direct_crawler.failed_telecom_names
             stats["coverage"] = direct_crawler.coverage if isinstance(direct_crawler.coverage, list) else []
             stats["direct_crawled"] = len(direct_plans)
-            all_raw_plans.extend(direct_plans)
+            for row in stats['coverage']:
+                if row.get('hub_complete') is False:
+                    raise ValueError(f'{row["name"]} 허브 전체 수집 미완료: 기존 추천 목록을 보존합니다.')
+            # 상세까지 검증한 동일 허브 상품을 우선하고 전역 목록에만 있는 상품은 유지한다.
+            from services.crawler.hub_brand_crawler import merge_hub_records
+            all_raw_plans = merge_hub_records(all_raw_plans, direct_plans,
+                complete_carriers=[row['name'] for row in stats['coverage'] if row.get('hub_complete')])
 
         stats["total_crawled"] = len(all_raw_plans)
 
@@ -139,7 +145,8 @@ def run_comprehensive_crawler_pipeline(
             )
             # 판매 채널별 조건을 별개 상품으로 유지한다.
             source = re.search(r'\[출처:([^]]+)\]', new_plan.raw_text or '')
-            key = identity({field: getattr(new_plan, field) for field in fields}) + (source.group(1) if source else '',)
+            key = identity({field: getattr(new_plan, field) for field in fields}) + (
+                source.group(1) if source else '', str(rdata.get('_hub_product_id') or ''))
             if key in seen_keys:
                 continue
             seen_keys.add(key)
@@ -167,6 +174,11 @@ def run_comprehensive_crawler_pipeline(
         for row in stats['coverage']:
             carrier_ids = [value[0] for value in db.query(Telecom.telecom_id).filter(Telecom.name == row['name']).all()]
             row['active_plan_count'] = db.query(Plan).filter(Plan.telecom_id.in_(carrier_ids), Plan.is_active == True).count()
+            # 브랜드 페이지 첫 화면이 아닌 전체 허브 목록을 포함한 적재 건수다.
+            row['hub_count'] = sum(1 for plan in plans_to_insert
+                                   if plan.telecom_id in carrier_ids and (
+                                       '[출처: 알뜰폰허브]' in (plan.raw_text or '')
+                                       or '브랜드전용관]' in (plan.raw_text or '')))
         stats['needs_attention'] = [row['name'] for row in stats['coverage'] if row['status'] != 'collected']
         stats["success"] = True
         stats["total_active_plans"] = db.query(Plan).filter(Plan.is_active == True).count()

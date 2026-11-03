@@ -3,6 +3,8 @@
 목록 주소 확인과 상품 수집 완료는 다르다. 동적 페이지는 별도 API 파서가 필요하다.
 """
 OFFICIAL_PLAN_LIST_URLS={
+    '모빙':'https://www.mobing.co.kr/product/plan',
+    '아시아모바일':'https://asiamobile.kr/view/price/pricePlan.aspx',
     '쉐이크모바일':'https://shakemobile.co.kr/M2Mobile/Set3G',
     '플래시모바일':'https://olleh.flashmobile.kr/html_k/pay_main.html',
     '친구모바일':'https://chingumobile.com/ko/plans/select/postpaid',

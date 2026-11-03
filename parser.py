@@ -44,14 +44,21 @@ class PlanTextParser:
 
         # 공백 제거 버전 (음성/문자 추출용)
         compact_text = re.sub(r"\s+", "", normalized)
+        # 상품명의 '매일30분'·혜택 문구보다 수집기가 확인한 월 제공량 필드를 우선한다.
+        voice_sections = [part for part in normalized.split('|')
+                          if re.match(r'^\s*(?:통화|음성)\s', part)]
+        sms_sections = [part for part in normalized.split('|')
+                        if re.match(r'^\s*(?:문자|SMS)\s', part, re.IGNORECASE)]
+        voice_text = re.sub(r'\s+', '', ' | '.join(voice_sections)) if voice_sections else compact_text
+        sms_text = re.sub(r'\s+', '', ' | '.join(sms_sections)) if sms_sections else compact_text
 
         return {
             "base_data_gb": base,
             "daily_data_gb": daily,
             "qos_speed_mbps": qos,
             "is_data_unlimited": is_unlimited,
-            "voice_minutes": PlanTextParser._extract_voice(compact_text),
-            "sms_count": PlanTextParser._extract_sms(compact_text),
+            "voice_minutes": PlanTextParser._extract_voice(voice_text),
+            "sms_count": PlanTextParser._extract_sms(sms_text),
             "raw_text": raw_text
         }
 

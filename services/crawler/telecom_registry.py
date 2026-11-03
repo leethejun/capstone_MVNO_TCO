@@ -30,13 +30,10 @@ MASTER_TELECOMS: List[Dict[str, str]] = [
     {"name": "A모바일(에넥스텔레콤)", "website_url": "https://www.amobile.co.kr", "network": "3사망"},
     {"name": "에르엘", "website_url": "https://www.erel.co.kr", "network": "3사망"},
     {"name": "이지모바일", "website_url": "https://www.egmobile.co.kr", "network": "3사망"},
-    {"name": "스노우맨", "website_url": "https://www.snowman.co.kr", "network": "3사망"},
     {"name": "고고모바일(고고팩토리)", "website_url": "https://www.gogomobile.co.kr", "network": "3사망"},
     {"name": "인스모바일", "website_url": "https://www.insmobile.co.kr", "network": "3사망"},
     {"name": "위너스텔(WELL)", "website_url": "https://www.idowell.co.kr", "network": "3사망"},
     {"name": "아시아모바일", "website_url": "https://asiamobile.kr", "network": "3사망"},
-    {"name": "니즈모바일", "website_url": "https://nizmobile.com", "network": "3사망"},
-    {"name": "친구모바일", "website_url": "https://chingumobile.com", "network": "3사망"},
     {"name": "에스원 안심모바일", "website_url": "http://www.s1mobile.co.kr", "network": "3사망"},
     {"name": "밸류컴", "website_url": "https://valuecomm.co.kr", "network": "3사망"},
     {"name": "도시락모바일", "website_url": "https://www.dosirakmobile.com", "network": "3사망"},
@@ -48,7 +45,6 @@ MASTER_TELECOMS: List[Dict[str, str]] = [
     {"name": "조이텔", "website_url": "https://joytel.co.kr", "network": "SKT"},
     {"name": "알비레오", "website_url": "https://www.albireomobile.com", "network": "SKT"},
     {"name": "쉐이크모바일", "website_url": "https://shakemobile.co.kr", "network": "KT"},
-    {"name": "아이디스파워텔", "website_url": "https://idispowertel.com", "network": "KT"},
     {"name": "드림라인 모바일", "website_url": "https://dreammobile.kr", "network": "KT"},
     {"name": "퍼스트 모바일", "website_url": "https://www.firstmobile.co.kr", "network": "KT"},
     {"name": "더원모바일", "website_url": "https://www.theonem.co.kr", "network": "KT"},
@@ -65,9 +61,6 @@ MASTER_TELECOMS: List[Dict[str, str]] = [
     {"name": "온국민폰", "website_url": "https://온국민폰.kr", "network": "LGU+"},
     {"name": "토리모바일", "website_url": "https://ntontel.com", "network": "LGU+"},
     {"name": "이음모바일", "website_url": "https://eummobile.co.kr", "network": "LGU+"},
-    {"name": "서경모바일", "website_url": "https://www.scsmobile.co.kr", "network": "LGU+"},
-    {"name": "여유모바일", "website_url": "https://www.yytelecom.co.kr", "network": "LGU+"},
-    {"name": "원텔레콤", "website_url": "https://onetelecom.co.kr", "network": "LGU+"},
 ]
 
 # 허브 법인명과 공식 브랜드명을 명시적으로 연결한다. 유사 문자열 추측은 하지 않는다.
@@ -79,6 +72,7 @@ TELECOM_ALIASES = {
     '고고팩토리': '고고모바일(고고팩토리)', '마블프로듀스': '마블링',
     '스테이지파이브': '핀다이렉트', '프리티 (SKT, KT망)': '프리티',
     '프리티 (LGU+망)': '프리티',
+    '위너스텔': '위너스텔(WELL)',
 }
 
 
@@ -118,6 +112,10 @@ def sync_telecom_master(db: Session = None, commit: bool = True) -> Dict[str, An
                 stats["inserted"] += 1
 
         db.flush()
+        for carrier in db.query(Telecom).all():
+            if is_excluded_telecom(carrier.name, carrier.website_url):
+                db.query(Plan).filter(Plan.telecom_id == carrier.telecom_id).update(
+                    {Plan.is_active: False}, synchronize_session=False)
         for alias, canonical in TELECOM_ALIASES.items():
             source = db.query(Telecom).filter(Telecom.name == alias).first()
             target = db.query(Telecom).filter(Telecom.name == canonical).first()
@@ -146,4 +144,22 @@ def is_excluded_telecom(name, website_url=''):
     """사용자가 명시적으로 제외한 사업자는 허브/공식몰 어느 경로로도 재등록하지 않는다."""
     normalized=re.sub(r'\s+', '', (name or '').replace('(주)', '').replace('㈜', '')).lower()
     host=urlparse(website_url or '').hostname or ''
-    return normalized in {'앤텔레콤','엔텔레콤','ntelecom','앤알커뮤니케이션','주식회사앤알커뮤니케이션'} or host=='n-telecom.co.kr' or host.endswith('.n-telecom.co.kr')
+    names = {'앤텔레콤','엔텔레콤','ntelecom','앤알커뮤니케이션','주식회사앤알커뮤니케이션',
+             '스노우맨','니즈모바일','친구모바일','아이디스파워텔','서경모바일','여유모바일','원텔레콤'}
+    domains = {'n-telecom.co.kr','snowman.co.kr','nizmobile.com','chingumobile.com',
+               'idispowertel.com','scsmobile.co.kr','yytelecom.co.kr','onetelecom.co.kr'}
+    return normalized in names or any(host == domain or host.endswith('.' + domain) for domain in domains)
+
+
+def visible_crawler_report(report):
+    """과거 보고서나 진행 상태에 남은 제외 사업자도 관리자에게 노출하지 않는다."""
+    if not isinstance(report, dict):
+        return report
+    result = dict(report)
+    if 'coverage' in result:
+        result['coverage'] = [row for row in result['coverage']
+                              if not is_excluded_telecom(row.get('name', ''), row.get('home_url', ''))]
+    for key in ('failed_telecoms', 'needs_attention'):
+        if key in result:
+            result[key] = [name for name in result[key] if not is_excluded_telecom(name)]
+    return result
