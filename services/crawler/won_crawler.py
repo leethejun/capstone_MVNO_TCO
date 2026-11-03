@@ -37,6 +37,7 @@ class WonCrawler:
                 break
             if not rows or page>=100:raise ValueError('우리WON 목록 페이지 누락')
             page+=1
+        self.total = len(items)
         plans=[];self.skipped=[];self.excluded=[]
         for item in items:
             details=self.query('LMPM000008',{'soId':item['soId'],'prodCd':item['prodCd']})['dsRes']

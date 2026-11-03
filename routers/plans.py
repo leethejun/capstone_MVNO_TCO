@@ -6,6 +6,7 @@ from models import Plan, Telecom
 from schemas import PlanResponse, PlanRankItem, TelecomResponse
 from services.tco import rank_plans_by_tco
 from services.explain import explain_ranking
+from services.crawler.telecom_registry import is_excluded_telecom
 
 router = APIRouter(prefix="/api/plans", tags=["Plans & TCO Ranking"])
 
@@ -57,7 +58,7 @@ def get_tco_ranked_plans(
 
 @router.get("/telecoms", response_model=List[TelecomResponse], summary="등록된 통신사 목록 조회")
 def get_telecoms(db: Session = Depends(get_db)):
-    return db.query(Telecom).all()
+    return [row for row in db.query(Telecom).all() if not is_excluded_telecom(row.name, row.website_url)]
 
 @router.get("/{plan_id}", response_model=PlanResponse, summary="요금제 단건 상세 조회")
 def get_plan_detail(plan_id: int, db: Session = Depends(get_db)):

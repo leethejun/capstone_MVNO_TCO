@@ -5,7 +5,7 @@ from database import get_db
 from models import Plan, Telecom
 from services.auth import require_admin
 from services.crawler.runner import start_refresh, get_run_state
-from services.crawler.telecom_registry import sync_telecom_master
+from services.crawler.telecom_registry import sync_telecom_master, visible_crawler_report
 
 router = APIRouter(prefix="/api/crawler", tags=["Web Crawler & Pipeline"])
 
@@ -25,7 +25,9 @@ def trigger_comprehensive_crawler(
 @router.get('/run-status')
 def crawler_run_status(admin=Depends(require_admin)):
     from services.scheduler.manager import get_scheduler_jobs
-    return {**get_run_state(), 'jobs': get_scheduler_jobs(), 'last_report': get_crawler_coverage(admin)}
+    state = get_run_state()
+    state['result'] = visible_crawler_report(state.get('result'))
+    return {**state, 'jobs': get_scheduler_jobs(), 'last_report': get_crawler_coverage(admin)}
 
 @router.post("/sync-telecoms", summary="대한민국 40+개 알뜰폰 통신사 마스터 DB 동기화")
 def sync_telecoms_endpoint(db: Session = Depends(get_db), admin=Depends(require_admin)):
@@ -55,4 +57,4 @@ def get_crawler_coverage(admin=Depends(require_admin)):
     report = Path(os.environ.get('CRAWLER_REPORT_PATH', 'runtime/crawler-report.json'))
     if not report.exists():
         return {'success': False, 'coverage': [], 'error': '아직 수집 실행 기록이 없습니다.'}
-    return json.loads(report.read_text(encoding='utf-8'))
+    return visible_crawler_report(json.loads(report.read_text(encoding='utf-8')))
