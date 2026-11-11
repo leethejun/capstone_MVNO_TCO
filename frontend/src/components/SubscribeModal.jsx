@@ -21,20 +21,33 @@ export default function SubscribeModal({ isOpen, onClose, plan, currentUser, onS
     setLoading(true);
     setError('');
 
+    const searchUrl = new URL('https://www.google.com/search');
+    searchUrl.searchParams.set('q', [plan.telecom_name, plan.title].filter(Boolean).join(' '));
+
+    // Open the tab during the submit gesture so the browser can allow it.
+    const searchTab = window.open('about:blank', '_blank');
+    if (searchTab) searchTab.opener = null;
+
+    let res;
     try {
-      const res = await createSubscription({
+      res = await createSubscription({
         userId: currentUser.user_id,
         planId: plan.plan_id,
         startDate,
         targetMonths: Number(targetMonths),
       });
-      onSuccess(res);
-      onClose();
     } catch (err) {
+      searchTab?.close();
       setError(err.message || t("등록 중 오류가 발생했습니다."));
+      return;
     } finally {
       setLoading(false);
     }
+
+    const canNavigate = searchTab && !searchTab.closed;
+    if (canNavigate) searchTab.location.replace(searchUrl.href);
+    onSuccess(res, canNavigate ? null : searchUrl.href);
+    onClose();
   };
 
   return (
@@ -113,7 +126,7 @@ export default function SubscribeModal({ isOpen, onClose, plan, currentUser, onS
             disabled={loading}
             className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition shadow-xs disabled:opacity-50"
           >
-            {loading ? t("등록 중...") : t("구독 요금제로 등록하기")}
+            {loading ? t("등록 중...") : t("요금제 등록 후 Google 검색")}
           </button>
         </form>
       </div>
