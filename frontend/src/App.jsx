@@ -22,6 +22,7 @@ export default function App() {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [selectedPlanForSubscribe, setSelectedPlanForSubscribe] = useState(null);
   const [selectedPlanForCompare, setSelectedPlanForCompare] = useState(null);
+  const [planSearchUrl, setPlanSearchUrl] = useState(null);
 
   const [authError, setAuthError] = useState('');
   const [accountSession] = useState(() => createAccountSession({
@@ -42,8 +43,8 @@ export default function App() {
   };
   const handleSelectUser = (user) => setCurrentUser(user);
 
-  const handleSubscribeSuccess = () => {
-    // 개통 등록 성공 시 내 요금제 탭으로 이동
+  const handleSubscribeSuccess = (_subscription, searchUrl) => {
+    setPlanSearchUrl(searchUrl);
     setActiveTab('subscription');
   };
 
@@ -57,6 +58,16 @@ export default function App() {
         {authError && <p role="alert" className="px-4 py-2 text-xs text-rose-600">{t(authError)}</p>}
         {/* 메인 화면 영역 */}
         <main className="flex-1 overflow-y-auto">
+          {activeTab === 'subscription' && currentUser && planSearchUrl && (
+            <a
+              href={planSearchUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block px-4 py-2 text-xs font-semibold text-indigo-700 underline"
+            >
+              {t("등록한 요금제 Google에서 검색")}
+            </a>
+          )}
           {activeTab === "admin" && <AdminPage currentUser={currentUser} />}
           {activeTab === 'rank' && (
             <RankPage
@@ -91,7 +102,7 @@ export default function App() {
           currentUser={currentUser}
           onSelectUser={handleSelectUser}
           onLogin={handleLogin}
-          onLoggedOut={() => { accountSession.clear(); setActiveTab("rank"); }}
+          onLoggedOut={() => { accountSession.clear(); setPlanSearchUrl(null); setActiveTab("rank"); }}
           onOpenAdmin={() => { setIsUserModalOpen(false); setActiveTab("admin"); }}
         />
 

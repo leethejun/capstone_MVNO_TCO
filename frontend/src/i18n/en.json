@@ -118,6 +118,8 @@
   "정상가": "Regular price",
   "미확인": "Unknown",
   "이 요금제로 개통 등록": "Register this plan",
+  "요금제 등록 후 Google 검색": "Register plan and search Google",
+  "등록한 요금제 Google에서 검색": "Search Google for the registered plan",
   "요금제 랭킹 조회 실패": "Unable to load plan rankings.",
   "계정 연결 실패": "Unable to connect your account.",
   "이용 주기 저장 실패": "Unable to save your interval.",
