@@ -109,17 +109,20 @@ export default function RankPage({ onSelectPlanForSubscribe, currentUser }) {
                 onClick={() => setUnlimitedSms(!unlimitedSms)}
                 className={`w-9 h-5 rounded-full transition relative ${unlimitedSms ? 'bg-indigo-600' : 'bg-slate-200'}`}
               >
-                <div className={`w-4 h-4 rounded-full bg-white transition absolute top-0.5 ${unlimitedSms ? 'left-4.5' : 'left-0.5'}`} />
+                <span aria-hidden="true" className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${unlimitedSms ? 'translate-x-4' : 'translate-x-0'}`} />
               </button>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-600 font-medium">{t("음성통화 무제한")}</span>
               <button
+                role="switch"
+                aria-label={t("음성통화 무제한")}
+                aria-checked={unlimitedVoice}
                 onClick={() => setUnlimitedVoice(!unlimitedVoice)}
                 className={`w-9 h-5 rounded-full transition relative ${unlimitedVoice ? 'bg-indigo-600' : 'bg-slate-200'}`}
               >
-                <div className={`w-4 h-4 rounded-full bg-white transition absolute top-0.5 ${unlimitedVoice ? 'left-4.5' : 'left-0.5'}`} />
+                <span aria-hidden="true" className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${unlimitedVoice ? 'translate-x-4' : 'translate-x-0'}`} />
               </button>
             </div>
 
